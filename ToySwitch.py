@@ -1,22 +1,18 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.stats import bernoulli
 from typing import Tuple
 from random import random
 
 
 # Assume lambda12=lambda21, 13=31, 14=41, 23=32, 24=42, 34=43
-def generate_arivals(rates: Tuple[float, float,
-                                  float, float,
-                                  float, float]) -> np.ndarray:
-    arrivals = np.zeros((6, 1))
-    lambda12, lambda13, lambda14, lambda23, lambda24, lambda34 = rates
+def generate_uniform_arivals(rate: float, NumUsers: int) -> np.ndarray:
 
-    arrivals[0, 0] = bernoulli.rvs(lambda12, size=1)[0]
-    arrivals[1, 0] = bernoulli.rvs(lambda13, size=1)[0]
-    arrivals[2, 0] = bernoulli.rvs(lambda14, size=1)[0]
-    arrivals[3, 0] = bernoulli.rvs(lambda23, size=1)[0]
-    arrivals[4, 0] = bernoulli.rvs(lambda24, size=1)[0]
-    arrivals[5, 0] = bernoulli.rvs(lambda34, size=1)[0]
+    cutoff = int(NumUsers * (NumUsers - 1) / 2)
+    arrivals = np.zeros((cutoff, 1))
+
+    for x in range(cutoff):
+        arrivals[x, 0] = bernoulli.rvs(rate, size=1)[0]
 
     return arrivals
 
@@ -130,32 +126,44 @@ def define_size_3_matchings(NumUsers: int) -> Tuple:
 def select_max_weight_matching(possible_matchings: Tuple,
                                current_queue_lengths: np.ndarray) -> Tuple:
 
-    max_matching = possible_matchings[0]
+    max_matching = np.zeros((np.shape(current_queue_lengths)[0], 1))
     max_weight = 0
+    graph = gen_network_graph(np.shape(current_queue_lengths)[0] - 2)
+
     for matching in possible_matchings:
         weight = 0
+        array_matching = np.zeros((np.shape(current_queue_lengths)[0], 1))
         for edge in matching:
-            if (edge[0] == 0):
-                if (edge[1] == 0):
-                    weight += current_queue_lengths[0, 0]
-                elif (edge[1] == 1):
-                    weight += current_queue_lengths[1, 0]
-                elif (edge[1] == 2):
-                    weight += current_queue_lengths[2, 0]
-            elif (edge[0] == 1):
-                if (edge[1] == 1):
-                    weight += current_queue_lengths[3, 0]
-                elif (edge[1] == 2):
-                    weight += current_queue_lengths[4, 0]
-            else:
-                weight += current_queue_lengths[5, 0]
+            ind = graph.index(edge)
+            weight += current_queue_lengths[ind]
+            array_matching[ind, 0] = 1
+            # if (edge[0] == 0):
+            #     if (edge[1] == 0):
+            #         weight += current_queue_lengths[0]
+            #         array_matching[0, 0] = 1
+            #     elif (edge[1] == 1):
+            #         weight += current_queue_lengths[1]
+            #         array_matching[1, 0] = 1
+            #     elif (edge[1] == 2):
+            #         weight += current_queue_lengths[2]
+            #         array_matching[2, 0] = 1
+            # elif (edge[0] == 1):
+            #     if (edge[1] == 1):
+            #         weight += current_queue_lengths[3]
+            #         array_matching[3, 0] = 1
+            #     elif (edge[1] == 2):
+            #         weight += current_queue_lengths[4]
+            #         array_matching[4, 0] = 1
+            # else:
+            #     weight += current_queue_lengths[5]
+            #     array_matching[5, 0] = 1
         if weight > max_weight:
             max_weight = weight
-            max_matching = matching
+            max_matching = array_matching
         elif weight == max_weight:
             p = random()
             if p >= 0.5:
-                max_matching = matching
+                max_matching = array_matching
     return max_matching
 
 
@@ -163,27 +171,51 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
                            rates: Tuple[float, float,
                                         float, float,
                                         float, float],
-                           iters: int) -> np.ndarray:
+                           iters: int) -> Tuple[np.ndarray, np.ndarray]:
     queue_lengths = np.zeros((sum(range(NumUsers)), iters))
+    ql = np.zeros(iters)
 
     possible_matchings = []
-    for edge in gen_network_graph(4):
+    for edge in gen_network_graph(NumUsers):
         possible_matchings.append([edge])
     if H_num > 1:
-        possible_matchings.append(define_size_2_matchings(NumUsers))
+        for matching in define_size_2_matchings(NumUsers):
+            possible_matchings.append(matching)
     if H_num == 3:
-        possible_matchings.append(define_size_3_matchings(NumUsers))
+        for matching in define_size_3_matchings(NumUsers):
+            possible_matchings.append(matching)
 
-    for x in range(1, iters):
-        arrivals = generate_arivals(rates)
-        queue_lengths[:, x] = queue_lengths[:, x-1] + arrivals[:, 0]
-    return queue_lengths
+    for x in range(iters):
+        arrivals = generate_uniform_arivals(rate, NumUsers)
+        matching = np.zeros((int(NumUsers * (NumUsers - 1) / 2), 1))
+        if x > 0:
+            matching = select_max_weight_matching(possible_matchings,
+                                                  queue_lengths[:, x - 1])
+        queue_lengths[:, x] = (queue_lengths[:, x-1] + arrivals[:, 0]
+                               - matching[:, 0])
+        for j in range(int(NumUsers * (NumUsers - 1) / 2)):
+            if queue_lengths[j, x] < 0:
+                queue_lengths[j, x] = 0
+        ql[x] = np.sum(queue_lengths[:, x], axis=0)
+
+    return queue_lengths[:, iters - 1], ql
 
 
-# rates = (0.25, 0.25, 0.25, 0.25, 0.25, 0.25)
-# print(simulate_queue_lengths(4, 1, rates, 10))
-# possible_matchings = define_size_2_matchings(4)
-# queues = np.array([[3], [3], [3], [3], [3], [3]])
+rate = 0.15
+iters = 1000
+rates = (rate, rate, rate, rate, rate, rate)
+final_slice, ql = simulate_queue_lengths(4, 1, rates, iters)
+final_slice2, ql2 = simulate_queue_lengths(4, 2, rates, iters)
+final_slice3, ql3 = simulate_queue_lengths(4, 3, rates, iters)
+
+plt.plot(range(iters), ql)
+plt.plot(range(iters), ql2)
+plt.plot(range(iters), ql3)
+plt.show()
+# possible_matchings = []
+# for edge in gen_network_graph(4):
+#     possible_matchings.append([edge])
+# queues = np.array([[3], [2], [2], [4], [8], [1]])
 # matching = select_max_weight_matching(possible_matchings, queues)
 # print(matching)
 # size = 4
