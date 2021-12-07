@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.stats import bernoulli
 from typing import Tuple
+from random import random
 
 
 # Assume lambda12=lambda21, 13=31, 14=41, 23=32, 24=42, 34=43
@@ -126,7 +127,37 @@ def define_size_3_matchings(NumUsers: int) -> Tuple:
     return matchings
 
 
-# ToDo: write function for determining the maximum weight matching
+def select_max_weight_matching(possible_matchings: Tuple,
+                               current_queue_lengths: np.ndarray) -> Tuple:
+
+    max_matching = possible_matchings[0]
+    max_weight = 0
+    for matching in possible_matchings:
+        weight = 0
+        for edge in matching:
+            if (edge[0] == 0):
+                if (edge[1] == 0):
+                    weight += current_queue_lengths[0, 0]
+                elif (edge[1] == 1):
+                    weight += current_queue_lengths[1, 0]
+                elif (edge[1] == 2):
+                    weight += current_queue_lengths[2, 0]
+            elif (edge[0] == 1):
+                if (edge[1] == 1):
+                    weight += current_queue_lengths[3, 0]
+                elif (edge[1] == 2):
+                    weight += current_queue_lengths[4, 0]
+            else:
+                weight += current_queue_lengths[5, 0]
+        if weight > max_weight:
+            max_weight = weight
+            max_matching = matching
+        elif weight == max_weight:
+            p = random()
+            if p >= 0.5:
+                max_matching = matching
+    return max_matching
+
 
 def simulate_queue_lengths(NumUsers: int, H_num: int,
                            rates: Tuple[float, float,
@@ -135,7 +166,9 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
                            iters: int) -> np.ndarray:
     queue_lengths = np.zeros((sum(range(NumUsers)), iters))
 
-    possible_matchings = gen_network_graph(NumUsers)
+    possible_matchings = []
+    for edge in gen_network_graph(4):
+        possible_matchings.append([edge])
     if H_num > 1:
         possible_matchings.append(define_size_2_matchings(NumUsers))
     if H_num == 3:
@@ -147,9 +180,12 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
     return queue_lengths
 
 
-rates = (0.25, 0.25, 0.25, 0.25, 0.25, 0.25)
-print(simulate_queue_lengths(4, 1, rates, 10))
-
+# rates = (0.25, 0.25, 0.25, 0.25, 0.25, 0.25)
+# print(simulate_queue_lengths(4, 1, rates, 10))
+# possible_matchings = define_size_2_matchings(4)
+# queues = np.array([[3], [3], [3], [3], [3], [3]])
+# matching = select_max_weight_matching(possible_matchings, queues)
+# print(matching)
 # size = 4
 # print('size 1: ', len(gen_network_graph(size)))
 # print('size 2: ')
