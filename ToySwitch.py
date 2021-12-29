@@ -8,6 +8,8 @@ from itertools import combinations, combinations_with_replacement
 from matplotlib import rc
 
 rc('text', usetex=True)
+rc('xtick', labelsize=28)
+rc('ytick', labelsize=28)
 
 
 # Assume arrivals are binomial random variables, such that up to a max of m
@@ -110,28 +112,49 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
     return ql
 
 
-# rate = 0.15
-# iters = 1000
-# rates = (rate, rate, rate, rate, rate, rate)
-# final_slice, ql = simulate_queue_lengths(4, 1, rates, iters)
-# final_slice2, ql2 = simulate_queue_lengths(4, 2, rates, iters)
-# final_slice3, ql3 = simulate_queue_lengths(4, 3, rates, iters)
-#
-# plt.plot(range(iters), ql)
-# plt.plot(range(iters), ql2)
-# plt.plot(range(iters), ql3)
-# plt.show()
-# possible_matchings = []
-# for edge in gen_network_graph(4):
-#     possible_matchings.append([edge])
-# queues = np.array([[3], [2], [2], [4], [8], [1]])
-# matching = select_max_weight_matching(possible_matchings, queues)
-# print(matching)
-# size = 4
-# print('size 1: ', len(gen_network_graph(size)))
-# print('size 2: ')
-# print(len(define_size_2_matchings(size)), '\n\n',
-#       define_size_2_matchings(size), '\n\n')
-# print('size 3: ')
-# print(len(define_size_3_matchings(size)), '\n\n',
-#       define_size_3_matchings(size))
+# Want to define plotting function which will be able to show various scenarios
+# with above and below threshold behaviour
+def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
+                         pDist: str, iters: int, dist_fac: float) -> None:
+    if ((pDist == 'uniform') or (pDist == 'Uniform') or (pDist == 'u')
+       or (pDist == 'U')):
+        threshold = ((H_num / max_subs) * (1 / bc(NumUsers, 2))
+                     // (1/10000)) / 10000  # Truncate at 4th place
+
+    ds1 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
+                                 threshold - (dist_fac * threshold), iters)
+
+    ds2 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
+                                 threshold, iters)
+
+    ds3 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
+                                 threshold + (dist_fac * threshold), iters)
+
+    cmap = plt.cm.get_cmap('plasma')
+    inds = np.linspace(0, 0.85, 3)
+    fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, figsize=(10, 8))
+    fig.suptitle('N = {}, H = {}, m = {},  T = {}'.format(NumUsers,
+                                                          H_num,
+                                                          max_subs,
+                                                          threshold),
+                 fontsize=28)
+    ax1.plot(range(iters), ds1, color=cmap(0),
+             label='T - {}'.format(dist_fac))
+    ax2.plot(range(iters), ds2, color=cmap(inds[1]),
+             label='T')
+    ax3.plot(range(iters), ds3, color=cmap(inds[2]),
+             label='T + {}'.format(dist_fac))
+
+    ax3.legend(fontsize=22, framealpha=0.6, loc=2)
+
+    ax2.legend(fontsize=22, framealpha=0.6, loc=2)
+
+    ax1.legend(fontsize=22, framealpha=0.6, loc=2)
+
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
+
+    figname = '../Figures/LR_{}_{}_{}'.format(NumUsers, H_num, max_subs)
+    plt.savefig(figname, dpi=300, bbox_inches='tight')
+
+
+study_near_threshold(20, 2, 1, 'u', 100000, 0.05)
