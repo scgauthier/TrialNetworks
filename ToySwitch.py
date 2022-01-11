@@ -66,7 +66,8 @@ def select_max_weight_matching(possible_matchings: Tuple,
         array_matching = np.zeros((np.shape(current_queue_lengths)[0], 1))
         for edge in matching:
             weight += current_queue_lengths[edge]
-            array_matching[edge, 0] = 1
+            if current_queue_lengths[edge] > 0:
+                array_matching[edge, 0] = 1
 
         if weight > max_weight:
             max_weight = weight
@@ -104,9 +105,7 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
                                                   queue_lengths[:, x - 1])
         queue_lengths[:, x] = (queue_lengths[:, x-1] + arrivals[:, 0]
                                - matching[:, 0])
-        for j in range(int(NumUsers * (NumUsers - 1) / 2)):
-            if queue_lengths[j, x] < 0:
-                queue_lengths[j, x] = 0
+
         ql[x] = np.sum(queue_lengths[:, x], axis=0)
 
     return ql
@@ -139,11 +138,11 @@ def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
                                                           threshold),
                  fontsize=28)
     ax1.plot(range(iters), ds1, color=cmap(0),
-             label='T - {}'.format(dist_fac))
+             label='T - {}'.format(dist_fac * threshold))
     ax2.plot(range(iters), ds2, color=cmap(inds[1]),
              label='T')
     ax3.plot(range(iters), ds3, color=cmap(inds[2]),
-             label='T + {}'.format(dist_fac))
+             label='T + {}'.format(dist_fac * threshold))
 
     ax3.legend(fontsize=22, framealpha=0.6, loc=2)
 
@@ -157,4 +156,4 @@ def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
 
-study_near_threshold(20, 2, 1, 'u', 100000, 0.05)
+study_near_threshold(4, 2, 3, 'u', 100000, 0.05)

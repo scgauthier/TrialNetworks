@@ -1,24 +1,31 @@
 import numpy as np
-from scipy.stats import bernoulli
-from scipy.special import binom
+import matplotlib.pyplot as plt
+from scipy.stats import binom
+from scipy.special import binom as bc
 from random import sample, choice, shuffle, random
 from math import floor
-from typing import Tuple
+from typing import Tuple, List
+from UniqueSizeHSchedules import gen_unique_schedules
+from matplotlib import rc
+
+rc('text', usetex=True)
+rc('xtick', labelsize=28)
+rc('ytick', labelsize=28)
 
 
-# Graph useful b/c any pairing from N nodes can be re-written as one of
-# the edges of this graph, so indices of Tuple of graph edges correspond to
-# unique identifiers for the VOQs.
+# Function generates all unique pairs, each corresponding to a serparate VOQ
 def gen_VOQ_graph(NumUsers: int) -> Tuple:
     Network_graph = []
 
-    for requester in range(NumUsers-1):
-        for partner in range(requester, NumUsers-1):
+    for requester in range(NumUsers - 1):
+        for partner in range(requester + 1, NumUsers):
             Network_graph.append((requester, partner))
 
     return Network_graph
 
 
+# Chooses uniformly at random N/2 unique pairings from the N nodes
+# Used to assign which VOQs may have probabilistic arrivals in a time slot
 def form_ordered_pairs(NumUsers: int) -> Tuple:
 
     pairs = []
@@ -32,14 +39,18 @@ def form_ordered_pairs(NumUsers: int) -> Tuple:
     shuffle(reciever_pool)
     for x in range(floor(NumUsers / 2)):
         if senders[x] < reciever_pool[x]:
-            pairs.append((senders[x], reciever_pool[x] - 1))
+            pairs.append((senders[x], reciever_pool[x]))
         else:
-            pairs.append((reciever_pool[x], senders[x] - 1))
+            pairs.append((reciever_pool[x], senders[x]))
 
     return pairs
 
 
-def gen_uniform_arrivals(NumUsers: int, rate: float) -> np.ndarray:
+# Generate arrivals according from time steps pairing. Arrivals are binomial,
+# with a max number of requests submitted max_submissions and p_submit
+def gen_arrivals(max_submissions: int,
+                 probs: List[float],
+                 NumUsers: int) -> np.ndarray:
 
     pairs = form_ordered_pairs(NumUsers)
     VOQs = gen_VOQ_graph(NumUsers)
@@ -47,11 +58,12 @@ def gen_uniform_arrivals(NumUsers: int, rate: float) -> np.ndarray:
 
     for pair in pairs:
         ind = VOQs.index(pair)
-        arrivals[ind, 0] = bernoulli.rvs(rate, size=1)[0]
+        arrivals[ind, 0] = binom.rvs(max_submissions, probs[ind], size=1)[0]
 
     return arrivals
 
 
+# Mathematical factorial
 def fact(Number: int) -> int:
     factorial = 1
     for x in range(1, Number + 1):
@@ -59,106 +71,128 @@ def fact(Number: int) -> int:
     return factorial
 
 
-def calc_total_matchings(NumUsers: int, H_max: int) -> int:
-    total_matchings = 1
-    for x in range(H_max):
-        total_matchings *= binom((NumUsers - (2 * x)), 2)
-    total_matchings *= (1 / fact(H_max))
-    return int(total_matchings)
+# Number of matchings of size H
+def calc_total_schedules(NumUsers: int, H_num: int) -> int:
+    NumSchedules = (1 / fact(H_num))
+    for m in range(H_num):
+        NumSchedules *= bc(NumUsers - (2 * m), 2)
+    return int(NumSchedules)
 
 
-def generate_size_2_matchings(NumUsers: int) -> Tuple:
-
-    matchings = []
-    for x in range(NumUsers - 2):
-        for y in range(x + 1, NumUsers):
-            options = list(range(x + 1, NumUsers))
-            options.remove(y)
-            if options:
-                for u in range(len(options)):
-                    for v in range(u + 1, len(options)):
-                        matchings.append([(x, y - 1),
-                                         (options[u], options[v] - 1)])
-
-    return matchings
-
-
-def determine_matched_VOQs(NumUsers: int) -> Tuple:
-
-    VOQ_matchings = []
-    matchings = generate_size_2_matchings(NumUsers)
-    graph = gen_VOQ_graph(NumUsers)
-
-    for matching in matchings:
-        VOQs = []
-        for edge in matching:
-            VOQs.append(graph.index(edge))
-        VOQ_matchings.append(VOQs)
-
-    return VOQ_matchings
-
-
-def select_max_weight_matching(NumUsers: int, possible_matchings: Tuple,
+def select_max_weight_schedule(NumUsers: int, H_num: int,
                                current_queue_lengths: np.ndarray) -> Tuple:
 
-    max_matching = np.zeros((np.shape(current_queue_lengths)[0], 1))
+    max_schedule = np.zeros((int(bc(NumUsers, 2)), 1))
     max_weight = 0
 
-    for matching in possible_matchings:
+    schedules = []
+    for x in range(1, H_num + 1):
+        schedules += gen_unique_schedules(NumUsers, H_num)
+
+    for schedule in schedules:
         weight = 0
-        array_matching = np.zeros((np.shape(current_queue_lengths)[0], 1))
-        for VOQ_ind in matching:
+        current = np.zeros((int(bc(NumUsers, 2)), 1))
+        for VOQ_ind in schedule:
             weight += current_queue_lengths[VOQ_ind]
-            array_matching[VOQ_ind, 0] = 1
+            if current_queue_lengths[VOQ_ind] > 0:
+                current[VOQ_ind, 0] = 1
 
         if weight > max_weight:
             max_weight = weight
-            max_matching = array_matching
+            max_schedule = current
         elif weight == max_weight:
             p = random()
             if p >= 0.5:
-                max_matching = array_matching
-    return max_matching
+                max_schedule = current
+    return max_schedule
 
 
 def simulate_queue_lengths(NumUsers: int,
                            H_num: int,
-                           rate: float,
-                           iters: int,
-                           sampling: bool) -> Tuple[np.ndarray, np.ndarray]:
-    queue_lengths = np.zeros((sum(range(NumUsers)), iters))
+                           max_submissions: int,
+                           p_dist: str,
+                           prob_param: float,
+                           iters: int) -> Tuple[np.ndarray, np.ndarray]:
+
+    queue_lengths = np.zeros((int(bc(NumUsers, 2)), iters))
     ql = np.zeros(iters)
 
-    possible_matchings = []
-    for x in range(len(gen_VOQ_graph(NumUsers))):
-        possible_matchings.append([x])
-    if H_num > 1:
-        for matching in determine_matched_VOQs(NumUsers):
-            possible_matchings.append(matching)
-    # if H_num == 3:
-    #     for matching in define_size_3_matchings(NumUsers):
-    #         possible_matchings.append(matching)
+    if ((p_dist == 'uniform') or (p_dist == 'Uniform') or (p_dist == 'u')
+       or (p_dist == 'U')):
+        probs = [prob_param] * int(bc(NumUsers, 2))
+
+    else:
+        probs = [0] * int(bc(NumUsers, 2))
 
     for x in range(iters):
-        arrivals = gen_uniform_arrivals(NumUsers, rate)
-        matching = np.zeros((int(NumUsers * (NumUsers - 1) / 2), 1))
+        arrivals = gen_arrivals(max_submissions, probs, NumUsers)
+        schedule = np.zeros((int(NumUsers * (NumUsers - 1) / 2), 1))
         if x > 0:
-            matching = select_max_weight_matching(NumUsers,
-                                                  possible_matchings,
+            schedule = select_max_weight_schedule(NumUsers,
+                                                  H_num,
                                                   queue_lengths[:, x - 1])
         queue_lengths[:, x] = (queue_lengths[:, x-1] + arrivals[:, 0]
-                               - matching[:, 0])
-        for j in range(int(NumUsers * (NumUsers - 1) / 2)):
-            if queue_lengths[j, x] < 0:
-                queue_lengths[j, x] = 0
+                               - schedule[:, 0])
+
         ql[x] = np.sum(queue_lengths[:, x], axis=0)
 
-    samples = []
-    if sampling:
-        for x in np.linspace(0, iters-1, 10):
-            samples.append(ql[int(x)])
-
-    return samples, ql
+    return ql
 
 
-print(simulate_queue_lengths(6, 2, 0.6, 1000, True)[0])
+def calc_fraction_schedules(NumUsers: int, H_num: int) -> float:
+    NumSchedules = calc_total_schedules(NumUsers, H_num)
+
+    gamma = bc(NumUsers, 2) / (NumSchedules * H_num)
+
+    return gamma
+
+
+# Want to define plotting function which will be able to show various scenarios
+# with above and below threshold behaviour
+def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
+                         pDist: str, iters: int, dist_fac: float) -> None:
+    if ((pDist == 'uniform') or (pDist == 'Uniform') or (pDist == 'u')
+       or (pDist == 'U')):
+        # threshold = ((H_num / max_subs) * (2 / NumUsers)
+        #              // (1/10000)) / 10000  # Truncate at 4th place
+        threshold = 0.33
+
+    ds1 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
+                                 threshold - (dist_fac * threshold), iters)
+
+    ds2 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
+                                 threshold, iters)
+
+    ds3 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
+                                 threshold + (dist_fac * threshold), iters)
+
+    cmap = plt.cm.get_cmap('plasma')
+    inds = np.linspace(0, 0.85, 3)
+    fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, figsize=(10, 8))
+    fig.suptitle('N = {}, H = {}, m = {},  T = {}'.format(NumUsers,
+                                                          H_num,
+                                                          max_subs,
+                                                          threshold),
+                 fontsize=28)
+    ax1.plot(range(iters), ds1, color=cmap(0),
+             label='T - {}'.format(dist_fac * threshold))
+    ax2.plot(range(iters), ds2, color=cmap(inds[1]),
+             label='T')
+    ax3.plot(range(iters), ds3, color=cmap(inds[2]),
+             label='T + {}'.format(dist_fac * threshold))
+
+    ax3.legend(fontsize=22, framealpha=0.6, loc=2)
+
+    ax2.legend(fontsize=22, framealpha=0.6, loc=2)
+
+    ax1.legend(fontsize=22, framealpha=0.6, loc=2)
+
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
+
+    figname = '../Figures/LR_{}_{}_{}'.format(NumUsers, H_num, max_subs)
+    # plt.savefig(figname, dpi=300, bbox_inches='tight')
+    plt.show()
+
+
+# study_near_threshold(6, 3, 3, 'u', 5000, 0.06)
+print(simulate_queue_lengths(4, 2, 1, 'u', 0.95, 100))
