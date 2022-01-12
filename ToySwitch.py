@@ -80,10 +80,12 @@ def select_max_weight_schedule(possible_schedules: Tuple,
     for schedule in possible_schedules:
         weight = 0
         array_schedule = np.zeros((np.shape(current_queue_lengths)[0], 1))
+        current_lengths = np.copy(current_queue_lengths)
         for edge in schedule:
-            weight += current_queue_lengths[edge]
-            if current_queue_lengths[edge] > 0:
+            weight += current_lengths[edge]
+            if current_lengths[edge] > 0:
                 array_schedule[edge, 0] = 1
+            current_lengths[edge] -= 2
 
         if weight > max_weight:
             max_weight = weight
@@ -184,11 +186,9 @@ def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
     ds1 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
                                  threshold - (dist_fac * threshold),
                                  gen_prob, failure_mech, iters)
-
     ds2 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
                                  threshold, gen_prob,
                                  failure_mech, iters)
-
     ds3 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
                                  threshold + (dist_fac * threshold),
                                  gen_prob, failure_mech, iters)
@@ -222,4 +222,4 @@ def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
 
-study_near_threshold(7, 3, 1, 'u', 0.75, 'rq', 100000, 0.05)
+study_near_threshold(5, 2, 3, 'u', 0.75, 'rq', 100000, 0.05)
