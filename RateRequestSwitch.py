@@ -12,14 +12,22 @@ from random import random, sample
 def F1_rate_declare(change_rate: float,
                     mean_rate: float,
                     rate_var: float,
-                    rates: np.ndarray) -> np.ndarray:
+                    time: int,
+                    delay: float,
+                    rates: np.ndarray,
+                    change_locked: np.ndarray) -> list:
 
     NQs = np.shape(rates)[0]
     up_rates = np.copy(rates)
+    alterable = []
     for x in range(NQs):
+        if (time >= (change_locked[x, 0] + delay)):
+            alterable.append(x)
+    for x in alterable:
         if random() < (change_rate / NQs):  # Change rate equally distributed
             up_rates[x, 0] = norm.rvs(mean_rate, rate_var, size=1)[0]
-    return up_rates
+            change_locked[x, 0] = time
+    return up_rates, change_locked
 
 
 def calc_F1_schedule(declared_rates: np.ndarray,
@@ -109,6 +117,7 @@ def simulate_F1_service(NumUsers: int,
                         H_num: int,
                         p_gen: float,
                         gen_window: int,
+                        flux_delay: int,
                         change_rate: float,
                         mean_rate: float,
                         rate_var: float,
@@ -121,7 +130,7 @@ def simulate_F1_service(NumUsers: int,
     QoS = np.zeros((NQs, runtime))
     locked = np.zeros((NQs, 1))  # time stamps when altered
 
-    # set initial
+    # set initial, lock in for gen_window
     schedule, locked = calc_F1_schedule(dec_rates,
                                         ach_rates,
                                         H_num,
@@ -129,6 +138,7 @@ def simulate_F1_service(NumUsers: int,
                                         gen_window,
                                         locked,
                                         schedule)
+    change_locked = np.copy(locked)
 
     for x in range(runtime):
 
@@ -147,21 +157,27 @@ def simulate_F1_service(NumUsers: int,
         schedule, locked = calc_F1_schedule(dec_rates,
                                             ach_rates,
                                             H_num,
-                                            0,
+                                            x,
                                             gen_window,
                                             locked,
                                             schedule)
 
         # Decide rate changes:
-        dec_rates = F1_rate_declare(change_rate,
-                                    mean_rate,
-                                    rate_var,
-                                    dec_rates)
+        # Alter 2 ways: 1 - Can't change rate when schedule locked?
+        # 2 - can only change after time flux_delay from last change.
+        # 2 is implemented
+        dec_rates, change_locked = F1_rate_declare(change_rate,
+                                                   mean_rate,
+                                                   rate_var,
+                                                   x,
+                                                   flux_delay,
+                                                   dec_rates,
+                                                   change_locked)
     return QoS
 
 
-time = 1000
-QoS = simulate_F1_service(4, 2, 0.2, 10, 0.05, 0.2, 0.05, time)
+time = 10000
+QoS = simulate_F1_service(4, 2, 0.85, 10, 20, 0.05, 0.2, 0.05, time)
 for x in range(int(bc(4, 2))):
     plt.plot(range(time - int(time / 100)), QoS[x, int(time / 100):])
 plt.show()
