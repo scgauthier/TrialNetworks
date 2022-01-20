@@ -3,10 +3,12 @@ import matplotlib.pyplot as plt
 from scipy.special import binom as bc
 from scipy.stats import norm, bernoulli
 from random import random, sample
+from math import sqrt
 
 
 # Parameters:
-# -change rate: stipulates how often a single queue changes it's declared rate
+# -change rate: stipulates how often a single (unlocked) queue changes
+#               it's declared rate
 # mean_rate: the average rate declared by any queue
 # rate_var: variance of declared rates
 def F1_rate_declare(change_rate: float,
@@ -17,6 +19,7 @@ def F1_rate_declare(change_rate: float,
                     rates: np.ndarray,
                     change_locked: np.ndarray) -> list:
 
+    rate_std = sqrt(rate_var)
     NQs = np.shape(rates)[0]
     up_rates = np.copy(rates)
     alterable = []
@@ -24,65 +27,62 @@ def F1_rate_declare(change_rate: float,
         if (time >= (change_locked[x, 0] + delay)):
             alterable.append(x)
     for x in alterable:
-        if random() < (change_rate / NQs):  # Change rate equally distributed
-            up_rates[x, 0] = norm.rvs(mean_rate, rate_var, size=1)[0]
+        # if random() < (change_rate / NQs):  # Change rate equally distributed
+        if random() < change_rate:
+            draw = -1
+            while draw < 0:
+                draw = norm.rvs(mean_rate, rate_std, size=1)[0]
+            up_rates[x, 0] = draw
             change_locked[x, 0] = time
     return up_rates, change_locked
 
 
-def calc_F1_schedule(declared_rates: np.ndarray,
-                     achieved_rates: np.ndarray,
-                     H_num: int,
-                     time: int,
-                     delay: int,
-                     locked: np.ndarray,
-                     schedule: np.ndarray) -> list:
+def F1_schedule(declared_rates: np.ndarray,
+                achieved_rates: np.ndarray,
+                H_num: int,
+                time: int,
+                delay: int,
+                locked: np.ndarray,
+                schedule: np.ndarray) -> list:
 
     NQs = np.shape(declared_rates)[0]
     new_schedule = np.copy(schedule)
 
-    if time > 0:
-        alterable = []
-        # Determine H effective
-        for x in np.nonzero(schedule[:, 0])[0]:
-            if (time >= locked[x, 0] + delay):
-                alterable.append(x)
-
-        # Leave all unalterable scheduled
-        for x in alterable:
-            new_schedule[x, 0] = 0
-
-        H_eff = len(alterable)
-
-        if H_eff > 0:
-            # Determine rate diffs for schedulable queues
-            diffs = []
-            for x in range(NQs):
-                if x not in np.nonzero(new_schedule[:, 0])[0]:
-                    diffs.append(declared_rates[x, 0]
-                                 - achieved_rates[x, 0])
-
-            arranged_diffs = sorted(diffs)
-            arranged_diffs.reverse()
-
-            # Fill in schedule gaps
-            if (np.max(arranged_diffs) != np.min(arranged_diffs)):
-                for x in range(H_eff):
-                    ind = diffs.index(arranged_diffs[x])
-                    new_schedule[ind, 0] = 1
-                    locked[ind, 0] = time
-
-                # If no differences, break ties randomly
-            else:
-                inds = sample(np.nonzero(new_schedule[:, 0])[0], H_eff)
-                for x in inds:
-                    new_schedule[x, 0] = 1
-
-    # At time 0, assign random schedule
-    else:
-        inds = sample(range(NQs), H_num)
-        for x in inds:
+    # randomly schedule if nothing achieved yet
+    if np.sum(achieved_rates) == 0:
+        for x in sample(range(NQs), H_num):
             new_schedule[x, 0] = 1
+            locked[x, 0] = time
+
+    else:
+
+        # should be +ve if not over achieving
+        diffs = list((declared_rates - achieved_rates).flatten())
+
+        # keep scheduled if within gen_window time:
+        fixed = NQs
+        for x in range(NQs):
+            if time >= locked[x, 0] + delay:
+                new_schedule[x, 0] = 0
+                fixed -= 1
+            else:
+                diffs[x] = -1
+        H_eff = H_num - fixed
+
+        arranged_diffs = sorted(diffs)
+        arranged_diffs.reverse()
+
+        for x in range(H_eff):
+            # Over blocking
+            # if arranged_diffs[x] > 0:
+            #     ind = diffs.index(arranged_diffs[x])
+            #     new_schedule[ind, 0] = 1
+            #     locked[ind, 0] = time
+
+            # Not over blocking
+            ind = diffs.index(arranged_diffs[x])
+            new_schedule[ind, 0] = 1
+            locked[ind, 0] = time
 
     return new_schedule, locked
 
@@ -131,13 +131,13 @@ def simulate_F1_service(NumUsers: int,
     locked = np.zeros((NQs, 1))  # time stamps when altered
 
     # set initial, lock in for gen_window
-    schedule, locked = calc_F1_schedule(dec_rates,
-                                        ach_rates,
-                                        H_num,
-                                        0,
-                                        gen_window,
-                                        locked,
-                                        schedule)
+    schedule, locked = F1_schedule(dec_rates,
+                                   ach_rates,
+                                   H_num,
+                                   0,
+                                   gen_window,
+                                   locked,
+                                   schedule)
     change_locked = np.copy(locked)
 
     for x in range(runtime):
@@ -154,13 +154,13 @@ def simulate_F1_service(NumUsers: int,
             ach_rates = rate_updates(ach_rates, generated, x)
 
         # Decide on schedule:
-        schedule, locked = calc_F1_schedule(dec_rates,
-                                            ach_rates,
-                                            H_num,
-                                            x,
-                                            gen_window,
-                                            locked,
-                                            schedule)
+        schedule, locked = F1_schedule(dec_rates,
+                                       ach_rates,
+                                       H_num,
+                                       x,
+                                       gen_window,
+                                       locked,
+                                       schedule)
 
         # Decide rate changes:
         # Alter 2 ways: 1 - Can't change rate when schedule locked?
@@ -176,11 +176,89 @@ def simulate_F1_service(NumUsers: int,
     return QoS
 
 
+# Output arrays of QoS for plotting and averaged QoS stats
+# No change rate: fix a set of rate declarations at beginning
+def stripped_simulation(NumUsers: int,
+                        H_num: int,
+                        p_gen: float,
+                        mean_rate: float,
+                        rate_var: float,
+                        runtime: int) -> list:
+
+    NQs = int(bc(NumUsers, 2))
+    schedule = np.zeros((NQs, 1))
+    dec_rates = np.ones((NQs, 1)) * (mean_rate - 0.01)
+    ach_rates = np.zeros((NQs, 1))
+    QoS = np.zeros((NQs, runtime))
+    locked = np.zeros((NQs, 1))  # time stamps when altered
+
+    # get gaussian rate declatations
+    # use same declarations for entire sim
+    dec_rates, fake_locked = F1_rate_declare(1,
+                                             mean_rate,
+                                             rate_var,
+                                             0,
+                                             0,
+                                             dec_rates,
+                                             locked)
+    print(dec_rates)
+    # get new starting schedule, fake time 1
+    schedule, fake_locked = F1_schedule(dec_rates,
+                                        ach_rates,
+                                        H_num,
+                                        0,
+                                        0,
+                                        locked,
+                                        schedule)
+    # start simulation
+    for x in range(runtime):
+        # Update quality of service tracking
+        for y in range(NQs):
+            QoS[y, x] = ach_rates[y, 0] - dec_rates[y, 0]
+
+        # Do pair gen from current schedule
+        generated = pair_gen(p_gen, schedule)
+
+        # Achieved rate updates:
+        if x > 0:
+            ach_rates = rate_updates(ach_rates, generated, x)
+
+            # Decide on schedule:
+            schedule, fake_locked = F1_schedule(dec_rates,
+                                                ach_rates,
+                                                H_num,
+                                                x,
+                                                0,
+                                                locked,
+                                                schedule)
+    queue_avrgs = np.zeros((NQs, 1))
+    for x in range(NQs):
+        queue_avrgs[x, 0] = np.sum(QoS[x, :]) / runtime
+
+    Avrg_QoS = np.sum(queue_avrgs[:, 0]) / NQs
+
+    return QoS, queue_avrgs, Avrg_QoS
+
+
+# time = 10000
+# QoS = simulate_F1_service(4, 2, 0.25, 10, 20, 0.05, 0.15, 0.02, time)
+# for x in range(int(bc(4, 2))):
+#     plt.plot(range(time - int(time / 100)), QoS[x, int(time / 100):])
+# plt.show()
+
+# Stripped down simulation
+mu = 0.15
+var = 0.005
+p_gen = 0.25
 time = 10000
-QoS = simulate_F1_service(4, 2, 0.85, 10, 20, 0.05, 0.2, 0.05, time)
+QoS, queue_avrgs, AQoS = stripped_simulation(4, 2, p_gen, mu, var, time)
+print('Queue avrgs: ', queue_avrgs, '\n\n', 'Average QoS: ', AQoS)
 for x in range(int(bc(4, 2))):
-    plt.plot(range(time - int(time / 100)), QoS[x, int(time / 100):])
+    plt.plot(range(time - int(time / 100)), QoS[x, int(time / 100):],
+             label='{}'.format(x))
+plt.legend()
 plt.show()
+
 
 # How will continuous time simulation work?
 # Run for time x \in [0, Stop)
