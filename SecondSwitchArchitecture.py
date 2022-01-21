@@ -6,6 +6,7 @@ from random import sample, choice, shuffle, random
 from math import floor
 from typing import Tuple, List
 from UniqueSizeHSchedules import gen_unique_schedules
+from ToySwitch import model_probabilistic_link_gen
 from matplotlib import rc
 
 rc('text', usetex=True)
@@ -112,9 +113,11 @@ def simulate_queue_lengths(NumUsers: int,
                            max_submissions: int,
                            p_dist: str,
                            prob_param: float,
+                           p_gen: float,
                            iters: int) -> Tuple[np.ndarray, np.ndarray]:
 
     queue_lengths = np.zeros((int(bc(NumUsers, 2)), iters))
+    marked = np.zeros((int(bc(NumUsers, 2)), 1))
     ql = np.zeros(iters)
 
     if ((p_dist == 'uniform') or (p_dist == 'Uniform') or (p_dist == 'u')
@@ -131,6 +134,9 @@ def simulate_queue_lengths(NumUsers: int,
             schedule = select_max_weight_schedule(NumUsers,
                                                   H_num,
                                                   queue_lengths[:, x - 1])
+            schedule, marked = model_probabilistic_link_gen(NumUsers,
+                                                            p_gen,
+                                                            (schedule))
         queue_lengths[:, x] = (queue_lengths[:, x-1] + arrivals[:, 0]
                                - schedule[:, 0])
 
@@ -150,29 +156,34 @@ def calc_fraction_schedules(NumUsers: int, H_num: int) -> float:
 # Want to define plotting function which will be able to show various scenarios
 # with above and below threshold behaviour
 def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
-                         pDist: str, iters: int, dist_fac: float) -> None:
+                         p_gen: float, pDist: str, iters: int,
+                         dist_fac: float) -> None:
     if ((pDist == 'uniform') or (pDist == 'Uniform') or (pDist == 'u')
        or (pDist == 'U')):
-        threshold = ((H_num / max_subs) * (1 / floor(NumUsers / 2))
+        threshold = ((H_num / max_subs) * (1 / floor(NumUsers / 2)
+                     * p_gen)
                      // (1/10000)) / 10000  # Truncate at 4th place
         threshold = min(0.95, threshold)
 
     ds1 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
-                                 threshold - (dist_fac * threshold), iters)
+                                 threshold - (dist_fac * threshold),
+                                 p_gen, iters)
 
     ds2 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
-                                 threshold, iters)
+                                 threshold, p_gen, iters)
 
     ds3 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
-                                 threshold + (dist_fac * threshold), iters)
+                                 threshold + (dist_fac * threshold),
+                                 p_gen, iters)
 
     cmap = plt.cm.get_cmap('plasma')
     inds = np.linspace(0, 0.85, 3)
     fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, figsize=(10, 8))
-    fig.suptitle('N = {}, H = {}, m = {},  T = {}'.format(NumUsers,
-                                                          H_num,
-                                                          max_subs,
-                                                          threshold),
+    fig.suptitle('N={}, H={}, m={},  T={}, p gen={}'.format(NumUsers,
+                                                            H_num,
+                                                            max_subs,
+                                                            threshold,
+                                                            p_gen),
                  fontsize=28)
     ax1.plot(range(iters), ds1, color=cmap(0),
              label='T - {}'.format(dist_fac * threshold))
@@ -189,10 +200,11 @@ def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
 
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
 
-    figname = '../Figures/MR_{}_{}_{}'.format(NumUsers, H_num, max_subs)
+    figname = '../Figures/MR_PG_{}_{}_{}'.format(NumUsers, H_num, max_subs)
     plt.savefig(figname, dpi=300, bbox_inches='tight')
     # plt.show()
 
 
-study_near_threshold(6, 3, 3, 'u', 10000, 0.05)
+p_gen = 0.25
+study_near_threshold(4, 2, 2, p_gen, 'u', 10000, 0.2)
 # print(simulate_queue_lengths(4, 2, 2, 'u', 0.5, 100))
