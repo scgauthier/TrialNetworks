@@ -153,9 +153,9 @@ def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
                          pDist: str, iters: int, dist_fac: float) -> None:
     if ((pDist == 'uniform') or (pDist == 'Uniform') or (pDist == 'u')
        or (pDist == 'U')):
-        # threshold = ((H_num / max_subs) * (2 / NumUsers)
-        #              // (1/10000)) / 10000  # Truncate at 4th place
-        threshold = 0.33
+        threshold = ((H_num / max_subs) * (1 / floor(NumUsers / 2))
+                     // (1/10000)) / 10000  # Truncate at 4th place
+        threshold = min(0.95, threshold)
 
     ds1 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
                                  threshold - (dist_fac * threshold), iters)
@@ -189,10 +189,10 @@ def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
 
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
 
-    figname = '../Figures/LR_{}_{}_{}'.format(NumUsers, H_num, max_subs)
-    # plt.savefig(figname, dpi=300, bbox_inches='tight')
-    plt.show()
+    figname = '../Figures/MR_{}_{}_{}'.format(NumUsers, H_num, max_subs)
+    plt.savefig(figname, dpi=300, bbox_inches='tight')
+    # plt.show()
 
 
-# study_near_threshold(6, 3, 3, 'u', 5000, 0.06)
-print(simulate_queue_lengths(4, 2, 1, 'u', 0.95, 100))
+study_near_threshold(6, 3, 3, 'u', 10000, 0.05)
+# print(simulate_queue_lengths(4, 2, 2, 'u', 0.5, 100))
