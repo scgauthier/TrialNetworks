@@ -4,6 +4,12 @@ from scipy.special import binom as bc
 from scipy.stats import norm, bernoulli
 from random import random, sample
 from math import sqrt
+from time import localtime, strftime
+from matplotlib import rc
+
+rc('text', usetex=True)
+rc('xtick', labelsize=28)
+rc('ytick', labelsize=28)
 
 
 # Parameters:
@@ -43,7 +49,8 @@ def F1_schedule(declared_rates: np.ndarray,
                 time: int,
                 delay: int,
                 locked: np.ndarray,
-                schedule: np.ndarray) -> list:
+                schedule: np.ndarray,
+                normalized=False) -> list:
 
     NQs = np.shape(declared_rates)[0]
     new_schedule = np.copy(schedule)
@@ -201,7 +208,6 @@ def stripped_simulation(NumUsers: int,
                                              0,
                                              dec_rates,
                                              locked)
-    print(dec_rates)
     # get new starting schedule, fake time 1
     schedule, fake_locked = F1_schedule(dec_rates,
                                         ach_rates,
@@ -240,6 +246,82 @@ def stripped_simulation(NumUsers: int,
     return QoS, queue_avrgs, Avrg_QoS
 
 
+def plot_QoS(QoS: np.ndarray,
+             NumUsers: int,
+             H_num: int,
+             mean_rate: float,
+             rate_var: float,
+             p_gen: float,
+             time: int) -> None:
+
+    cmap = plt.cm.get_cmap('plasma')
+    inds = np.linspace(0, 0.85, int(bc(NumUsers, 2)))
+    plt.figure(figsize=(10, 8))
+    plt.title('N={}, H={}, mu={}, var={}, p={}'.format(
+              NumUsers, H_num, mean_rate, rate_var, p_gen),
+              fontsize=28)
+    for x in range(int(bc(NumUsers, 2))):
+        plt.plot(range(time - int(time / 100)), QoS[x, int(time / 100):],
+                 color=cmap(inds[x]), label='{}'.format(x))
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
+    plt.legend(fontsize=20)
+    plt.xlabel('Time', fontsize=28)
+    plt.ylabel('QoS: achieved - declared rate', fontsize=28)
+
+    timestrp = strftime('%d_%m_%Y_%H_%M', localtime())
+    figname = '../Figures/RateFigs/Stripped/{}'.format(timestrp)
+    plt.savefig(figname, dpi=300, bbox_inches='tight')
+
+
+def sample_stripped_QoS(NumUsers: int,
+                        H_num: int,
+                        p_gen: float,
+                        mean_rate: float,
+                        rate_var: float,
+                        runtime: int,
+                        iters: int) -> None:
+
+    AQoS = np.zeros((iters))
+    # c95 = [((H_num * p_gen / bc(NumUsers, 2))
+    #         - mean_rate) - (1.96 * sqrt(rate_var)),
+    #        ((H_num * p_gen / bc(NumUsers, 2))
+    #         - mean_rate) + (1.96 * sqrt(rate_var))]
+    #
+    # c99 = [((H_num * p_gen / bc(NumUsers, 2))
+    #         - mean_rate) - (2.58 * sqrt(rate_var)),
+    #        ((H_num * p_gen / bc(NumUsers, 2))
+    #         - mean_rate) + (2.58 * sqrt(rate_var))]
+    #
+    # pass95 = 0
+    # pass99 = 0
+    for x in range(iters):
+        QoS, queue_avrgs, single_AQoS = stripped_simulation(NumUsers,
+                                                            H_num,
+                                                            p_gen,
+                                                            mean_rate,
+                                                            rate_var,
+                                                            runtime)
+        AQoS[x] = single_AQoS
+        # if (single_AQoS > c95[0]) and (single_AQoS < c95[1]):
+        #     pass95 += 1
+        # if (single_AQoS > c99[0]) and (single_AQoS < c99[1]):
+        #     pass99 += 1
+
+    realized_avrg = np.sum(AQoS) / iters
+
+    print(realized_avrg, '\n\n')
+
+    filename = './TextOut/{}_{}_{}.txt'.format(NumUsers, H_num, runtime)
+    afile = open(filename, 'a')
+    afile.write('Iters: {} \n'.format(iters))
+    afile.write('Mean rate, rate variance, pair gen probability: \
+                {}, {}, {}'.format(mean_rate, rate_var, p_gen))
+    afile.write('\n All samples average: {} \n\n\n'.format(realized_avrg))
+    afile.close()
+    # print(c95, pass95, '\n\n')
+    # print(c99, pass99)
+
+
 # time = 10000
 # QoS = simulate_F1_service(4, 2, 0.25, 10, 20, 0.05, 0.15, 0.02, time)
 # for x in range(int(bc(4, 2))):
@@ -250,14 +332,12 @@ def stripped_simulation(NumUsers: int,
 mu = 0.15
 var = 0.005
 p_gen = 0.25
-time = 10000
-QoS, queue_avrgs, AQoS = stripped_simulation(4, 2, p_gen, mu, var, time)
-print('Queue avrgs: ', queue_avrgs, '\n\n', 'Average QoS: ', AQoS)
-for x in range(int(bc(4, 2))):
-    plt.plot(range(time - int(time / 100)), QoS[x, int(time / 100):],
-             label='{}'.format(x))
-plt.legend()
-plt.show()
+time = 1000
+# QoS, queue_avrgs, AQoS = stripped_simulation(4, 2, p_gen, mu, var, time)
+# print('Queue avrgs: ', queue_avrgs, '\n\n', 'Average QoS: ', AQoS)
+# plot_QoS(QoS, 4, 2, mu, var, p_gen, time)
+
+sample_stripped_QoS(4, 2, p_gen, mu, var, time, 10000)
 
 
 # How will continuous time simulation work?
