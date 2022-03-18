@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import binom as bc
 from scipy.stats import binom
-from random import random
+from random import random, shuffle
 from typing import Tuple, List
 from itertools import combinations, combinations_with_replacement
 from matplotlib import rc
@@ -12,18 +12,65 @@ rc('xtick', labelsize=28)
 rc('ytick', labelsize=28)
 
 
-# Assume arrivals are binomial random variables, such that up to a max of m
-# requests submitted per VOQ per slot. Probability of each request submission
-# for queue i is p_i. Distribution of p_i's fixed in main code.
+# pDist options: 'uBin' = uniform binomial
+#                'rBin' = random splitt of threshold amongst binomial NQs
+def prep_dist(NumUsers: int, H_num: int,
+              prob_param: float,
+              pDist: str, cap: bool) -> list:
+
+    NQs = int(bc(NumUsers, 2))
+    threshold = prob_param
+    probs = [0] * NQs
+
+    if pDist == 'uBin':
+        probs = [prob_param / NQs] * NQs
+
+    elif pDist == 'rBin':
+        queues = list(range(NQs))
+        shuffle(queues)
+
+        if cap:
+            max_val = ((NQs / H_num) * prob_param) / NQs
+        else:
+            max_val = 1
+        # ensure using full space
+        while (round(sum(probs), 4) != round(threshold, 4)):
+            count = 1
+            prob_param = threshold
+            for x in queues:
+                if count < (NQs):
+                    select = float(random())
+                    incr = select * prob_param
+                    while incr > max_val:
+                        select = float(random())
+                        incr = select * prob_param
+                    probs[x] = incr
+                    prob_param -= incr
+                else:
+                    # assign rest / prevent overflow
+                    probs[x] = min(max_val, prob_param)
+                count += 1
+    return probs
+
+
+# Allow arrivals to follow different distributions, specified by pDist.
+# Specify max # of submissions per VOQ per round
+# Probability of each request submission
+# for queue i is p_i.
+# pDist options: 'uBin' = uniform binomial
+#                'rBin' = random splitt of threshold amongst binomial NQs
 def gen_arivals(max_submissions: int,
-                probs: List[float],
-                NumUsers: int) -> np.ndarray:
+                NumUsers: int,
+                pDist: str,
+                probs: list) -> np.ndarray:
 
-    cutoff = int(NumUsers * (NumUsers - 1) / 2)
-    arrivals = np.zeros(cutoff)
+    NQs = int(bc(NumUsers, 2))
+    arrivals = np.zeros(NQs)
 
-    for x in range(cutoff):
-        arrivals[x] = binom.rvs(max_submissions, probs[x], size=1)[0]
+    if ((pDist == 'uBin') or (pDist == 'rBin')):
+
+        for x in range(NQs):
+            arrivals[x] = binom.rvs(max_submissions, probs[x], size=1)[0]
 
     return arrivals
 
@@ -110,6 +157,7 @@ def shortcut_max_weight_schedule(H_num: int,
                                  failure_mech: str) -> np.ndarray:
 
     QLs = np.copy(current_queue_lengths)
+    # print(QLs, 'start schedule queue lengths \n')
     max_lengths = np.zeros(NQs)
     if failure_mech == 'ss':
         for x in range(NQs):
@@ -117,14 +165,17 @@ def shortcut_max_weight_schedule(H_num: int,
                 QLs[x] = 0  # Don't allow double scheduling
                 max_lengths[x] = 1
         num_failures = int(np.sum(marked))
-        max_lengths = marked
         H_num -= num_failures
+        # print(marked, 'marked \n', QLs, 'new schedule queue lengths \n')
+        # print(H_num, 'H \n')
 
     max_length_inds = np.argpartition(QLs, -H_num)[-H_num:]
+    # print(max_length_inds, 'max length inds')
     for x in max_length_inds:
         if QLs[x] > 0:  # don't sechedule empty queues
             max_lengths[x] = 1
 
+    # print(max_lengths, 'schedule generated \n\n')
     return max_lengths
 
 
@@ -158,6 +209,77 @@ def flexible_shortcut(H_num: int,
     return max_lengths
 
 
+def weighted_strict_shortcut(H_num: int, NQs: int,
+                             probs: list,
+                             current_queue_lengths: np.ndarray,
+                             marked: np.ndarray,
+                             failure_mech: str,
+                             service_times: np.ndarray,
+                             time: int) -> np.ndarray:
+    QLs = np.copy(current_queue_lengths)
+    weights = np.zeros(NQs)
+
+    # weight by time elapsed since service / requested rate
+    for q in range(NQs):
+        weights[q] = max(1, (time - service_times[q]) / probs[q])
+
+    # print(QLs, 'start schedule queue lengths \n')
+    max_lengths = np.zeros(NQs)
+    if failure_mech == 'ss':
+        for x in range(NQs):
+            if marked[x] > 0:
+                QLs[x] = 0  # Don't allow double scheduling
+                max_lengths[x] = 1
+        num_failures = int(np.sum(marked))
+        H_num -= num_failures
+        # print(marked, 'marked \n', QLs, 'new schedule queue lengths \n')
+        # print(H_num, 'H \n')
+
+    QLs = weights * QLs
+    max_length_inds = np.argpartition(QLs, -H_num)[-H_num:]
+    # print(max_length_inds, 'max length inds')
+    for x in max_length_inds:
+        if QLs[x] > 0:  # don't sechedule empty queues
+            max_lengths[x] = 1
+
+    # print(max_lengths, 'schedule generated \n\n')
+    return max_lengths
+
+
+def weighted_flex_shortcut(H_num: int, NQs: int,
+                           probs: list,
+                           current_queue_lengths: np.ndarray,
+                           marked: np.ndarray,
+                           failure_mech: str,
+                           service_times: np.ndarray,
+                           time: int) -> np.ndarray:
+
+    QLs = np.copy(current_queue_lengths)
+    max_lengths = np.zeros(NQs)
+    weights = np.zeros(NQs)
+
+    # weight by time elapsed since service / requested rate
+    for q in range(NQs):
+        weights[q] = max(1, (time - service_times[q]) / probs[q])
+
+    if failure_mech == 'ss':
+        QLs = QLs - marked
+        num_failures = int(np.sum(marked))
+        max_lengths = marked
+        H_num -= num_failures
+
+    QLs = weights * QLs
+    for x in range(H_num):
+        max_length_ind = np.argpartition(QLs, -1)[-1:]
+        # don't sechedule empty queues
+        if QLs[max_length_ind[0]] > 0:
+            max_lengths[max_length_ind[0]] += 1.0
+        # Cost function -1 to prevent scheduling same q H times
+        QLs[max_length_ind[0]] -= 1
+
+    return max_lengths
+
+
 def model_probabilistic_link_gen(NumUsers: int, gen_prob: float,
                                  schedule: np.ndarray) -> list:
     new_schedule = np.copy(schedule)
@@ -178,30 +300,31 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
                            gen_prob: float,
                            failure_mech: str,
                            sched_type: str,
-                           iters: int) -> np.ndarray:
+                           iters: int) -> Tuple[np.ndarray, np.ndarray,
+                                                np.ndarray, list]:
 
     NQs = int(bc(NumUsers, 2))
     queue_lengths = np.zeros((NQs, iters))
-    ql = np.zeros(iters)
     submission_times = np.zeros((NQs, iters))
     waiting_times_perQ = np.zeros((2, NQs))
-    cumulative_rates = np.zeros(NQs)
+    avrg_rates = np.zeros(NQs)
+    service_times = np.zeros(NQs)
     schedule = np.zeros(NQs)
     marked = np.zeros(NQs)
 
-    if ((pDist == 'uniform') or (pDist == 'Uniform') or (pDist == 'u')
-       or (pDist == 'U')):
-        probs = [prob_param] * NQs
-
+    if ((sched_type == 'strict') or (sched_type == 'weightStrict')):
+        cap = True
     else:
-        probs = [0] * NQs
+        cap = False
+    probs = prep_dist(NumUsers, H_num, prob_param, pDist, cap)
+    print('\n\n Requested', probs, 'Sum: ', sum(probs))
 
     for x in range(iters):
         # Get submitted requests
-        arrivals = gen_arivals(max_subs, probs, NumUsers)
+        arrivals = gen_arivals(max_subs, NumUsers, pDist, probs)
         # Update submission times
         for y in np.nonzero(arrivals):
-            submission_times[y, x] = 1
+            submission_times[y, x] = arrivals[y]
 
         # for current schedule, do link gen
         schedule, marked = model_probabilistic_link_gen(NumUsers,
@@ -210,25 +333,24 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
 
         # Update service times:
         for y in np.nonzero(schedule)[0]:
-            try:
-                subs = np.nonzero(submission_times[y, 0:x])[0]
-                # Update waiting times for served request
-                waiting_times_perQ[0, y] += x - subs[0]
-                # Clear served requests from tracking
-                submission_times[y, subs[0]] = 0
-                # Update number requests served
-                waiting_times_perQ[1, y] += 1
-            except IndexError:
-                continue
+            for z in range(int(schedule[y])):
+                try:
+                    subs = np.nonzero(submission_times[y, 0:x])[0]
+                    # Update waiting times for served request
+                    waiting_times_perQ[0, y] += x - subs[0]
+                    # Clear served requests from tracking
+                    submission_times[y, subs[0]] -= 1
+                    # Update number requests served
+                    waiting_times_perQ[1, y] += 1
+                except IndexError:
+                    continue
+            service_times[y] = x
 
         # Update queue lengths at x based on lengths at x-1, schedule from x-1,
         # successful link gen at x, and arrivals at x
         # Essentially lengths by end of x
         queue_lengths[:, x] = (queue_lengths[:, x-1] + arrivals[:]
                                - schedule[:])
-
-        # Store total queue lengths
-        ql[x] = np.sum(queue_lengths[:, x], axis=0)
 
         if sched_type == 'strict':
             schedule = shortcut_max_weight_schedule(H_num, NQs,
@@ -240,6 +362,22 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
                                          queue_lengths[:, x],
                                          marked,
                                          failure_mech)
+        elif sched_type == 'weightStrict':
+            schedule = weighted_strict_shortcut(H_num, NQs,
+                                                probs,
+                                                queue_lengths[:, x],
+                                                marked,
+                                                failure_mech,
+                                                service_times,
+                                                x)
+        elif sched_type == 'weightFlex':
+            schedule = weighted_flex_shortcut(H_num, NQs,
+                                              probs,
+                                              queue_lengths[:, x],
+                                              marked,
+                                              failure_mech,
+                                              service_times,
+                                              x)
         else:
             print('Invalid scheduling type specified')
             return
@@ -248,9 +386,10 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
         if waiting_times_perQ[1, x] > 0:
             waiting_times_perQ[0, x] = (waiting_times_perQ[0, x]
                                         / waiting_times_perQ[1, x])
-        cumulative_rates[x] = waiting_times_perQ[1, x] / iters
+        avrg_rates[x] = waiting_times_perQ[1, x] / iters
 
-    return ql, waiting_times_perQ[0, :], cumulative_rates
+    return (queue_lengths, waiting_times_perQ[0, :], avrg_rates,
+            (probs * max_subs))
 
 
 # Want to define plotting function which will be able to show various scenarios
@@ -260,24 +399,32 @@ def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
                          pDist: str, gen_prob: float, failure_mech: str,
                          sched_type: str, iters: int,
                          dist_fac: float) -> None:
-    if ((pDist == 'uniform') or (pDist == 'Uniform') or (pDist == 'u')
-       or (pDist == 'U')):
-        threshold = ((H_num * gen_prob / max_subs) * (1 / bc(NumUsers, 2))
-                     // (1/10000)) / 10000  # Truncate at 4th place
 
-    ds1, wt1, rt1 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
-                                           threshold - (dist_fac * threshold),
-                                           gen_prob, failure_mech,
-                                           sched_type, iters)
-    ds2, wt2, rt2 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
-                                           threshold, gen_prob,
-                                           failure_mech,
-                                           sched_type,
-                                           iters)
-    ds3, wt3, rt3 = simulate_queue_lengths(NumUsers, H_num, max_subs, pDist,
-                                           threshold + (dist_fac * threshold),
-                                           gen_prob, failure_mech,
-                                           sched_type, iters)
+    threshold = ((H_num * gen_prob / max_subs)
+                 // (1/10000)) / 10000  # Truncate at 4th place
+
+    q1, wt1, rt1, rr1 = simulate_queue_lengths(NumUsers, H_num, max_subs,
+                                               pDist,
+                                               (1 - dist_fac) * (threshold),
+                                               gen_prob, failure_mech,
+                                               sched_type, iters)
+    q2, wt2, rt2, rr2 = simulate_queue_lengths(NumUsers, H_num, max_subs,
+                                               pDist, threshold, gen_prob,
+                                               failure_mech,
+                                               sched_type,
+                                               iters)
+    q3, wt3, rt3, rr3 = simulate_queue_lengths(NumUsers, H_num, max_subs,
+                                               pDist,
+                                               (1 + dist_fac) * threshold,
+                                               gen_prob, failure_mech,
+                                               sched_type, iters)
+
+    ql1, ql2, ql3 = np.zeros(iters), np.zeros(iters), np.zeros(iters)
+    for x in range(iters):
+        # Store total queue lengths
+        ql1[x] = np.sum(q1[:, x], axis=0)
+        ql2[x] = np.sum(q2[:, x], axis=0)
+        ql3[x] = np.sum(q3[:, x], axis=0)
 
     cmap = plt.cm.get_cmap('plasma')
     inds = np.linspace(0, 0.85, 3)
@@ -285,11 +432,11 @@ def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
     fig.suptitle('N = {}, H = {}, m = {}, p = {}, T = {}'.format(
                  NumUsers, H_num, max_subs, gen_prob, threshold),
                  fontsize=28)
-    ax1.plot(range(iters), ds1, color=cmap(0),
+    ax1.plot(range(iters), ql1, color=cmap(0),
              label='T - {}'.format(dist_fac * threshold))
-    ax2.plot(range(iters), ds2, color=cmap(inds[1]),
+    ax2.plot(range(iters), ql2, color=cmap(inds[1]),
              label='T')
-    ax3.plot(range(iters), ds3, color=cmap(inds[2]),
+    ax3.plot(range(iters), ql3, color=cmap(inds[2]),
              label='T + {}'.format(dist_fac * threshold))
 
     ax3.legend(fontsize=22, framealpha=0.6, loc=2)
@@ -301,12 +448,55 @@ def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
 
     p_whole = int(100 * gen_prob)
-    figname = '../Figures/PairRequest/ProbGen_LR_{}_{}_{}_{}_{}_{}'.format(
-            NumUsers, H_num, p_whole, max_subs, failure_mech, sched_type)
+    figname = '../Figures/PairRequest/ProbGen_LR_{}_{}_{}_{}_{}_{}_{}'.format(
+            NumUsers, H_num, p_whole, max_subs, pDist,
+            failure_mech, sched_type)
 
-    plt.savefig(figname, dpi=300, bbox_inches='tight')
-    print(wt1, rt1, '\n\n', wt2, rt2, '\n\n', wt3, rt3)
+    # plt.savefig(figname, dpi=300, bbox_inches='tight')
+    plt.show()
+
+    NQs = int(bc(NumUsers, 2))
+    plt.figure(figsize=(10, 8))
+    inds = np.linspace(0, 0.85, NQs)
+    for x in range(NQs):
+        plt.plot(range(iters), q1[x, :], color=cmap(inds[x]),
+                 label='T={}, Rate={}, RR={}'.format(round(wt1[x], 1),
+                                                     round(rt1[x], 3),
+                                                     round(rr1[x], 3)))
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
+    plt.legend(fontsize=20, framealpha=0.6, loc=1)
+    plt.title('T - {}'.format((((dist_fac * threshold) // (1/1000)) / 1000)),
+              fontsize=28)
+    plt.show()
+
+    plt.figure(figsize=(10, 8))
+    inds = np.linspace(0, 0.85, NQs)
+    for x in range(NQs):
+        plt.plot(range(iters), q2[x, :], color=cmap(inds[x]),
+                 label='T={}, Rate={}, RR={}'.format(round(wt2[x], 1),
+                                                     round(rt2[x], 3),
+                                                     round(rr2[x], 3)))
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
+    plt.legend(fontsize=20, framealpha=0.6, loc=1)
+    plt.title('T', fontsize=28)
+    plt.show()
+
+    plt.figure(figsize=(10, 8))
+    inds = np.linspace(0, 0.85, NQs)
+    for x in range(NQs):
+        plt.plot(range(iters), q3[x, :], color=cmap(inds[x]),
+                 label='T={}, Rate={}, RR={}'.format(round(wt3[x], 1),
+                                                     round(rt3[x], 3),
+                                                     round(rr3[x], 3)))
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
+    plt.legend(fontsize=20, framealpha=0.6, loc=2)
+    plt.title('T + {}'.format((((dist_fac * threshold) // (1/1000)) / 1000)),
+              fontsize=28)
+    plt.show()
+
+    print(wt1, rt1, sum(rt1), '\n\n', wt2, rt2, sum(rt2),
+          '\n\n', wt3, rt3, sum(rt3))
 
 
-study_near_threshold(4, 2, 1, 'u', 0.75, 'rq', 'flexible', 100000, 0.05)
-# print(simulate_queue_lengths(4, 2, 1, 'u', 0.25, 0.75, 'ss', 'strict', 100))
+# study_near_threshold(4, 2, 1, 'rBin', 0.75, 'rq', 'strict', 10000, 0.05)
+# print(simulate_queue_lengths(4, 2, 1, 'rBin', 6/4, 0.75, 'rq', 'strict', 10))
