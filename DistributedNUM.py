@@ -73,18 +73,6 @@ def adjust_rates(rates: list, time: int,
     return rates
 
 
-rates = [0.005, 0.01, 0.45, 0.23, 0.026, 0.074]
-genPs = [0.75] * 6
-service_flags = ['idle', 'pg', 'idle', 'idle', 'idle', 'pg']
-service_times = np.array([18, 34, 30, 33, 29, 34])
-waiting_times = np.array([18, 1, 1, 1, 16, 6])
-time = 35
-max_sched_per_q = 1
-
-print(adjust_rates(rates, time, genPs, max_sched_per_q,
-                   service_times, waiting_times, service_flags))
-
-
 def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
                            max_subs: int,
                            pDist: str, prob_param: float,
