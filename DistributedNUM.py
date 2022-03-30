@@ -18,7 +18,8 @@ rc('ytick', labelsize=28)
 # Base simulation off of sim in ToySwitch, but allow rates to vary.
 # Also try to allow using either scheduling mode from beginning
 
-def define_tolerances(rates: list) -> list
+
+def define_tolerances(rates: list) -> list:
 
     tolerances = []
     for rt in rates:
@@ -28,44 +29,60 @@ def define_tolerances(rates: list) -> list
 
 
 def decrease_rate(rate: float) -> float:
-    return rate**2
+    return (0.1 * rate**2)
 
 
 def increase_rate(rate: float) -> float:
     return (0.1 * rate**(1/4))
 
+
 # service times = most recent service time
 # waiting times = waiting time most recent = interval observed b/w service)
 def adjust_rates(rates: list, time: int,
+                 genPs: list, max_sched_per_q: int,
                  service_times: np.ndarray,
-                 waiting_times: np.ndarray,
-                 service_flags: List[str]) -> list:
+                 waiting_times: np.ndarray) -> list:
 
     tolerances = define_tolerances(rates)
 
-    for x in range(rates):
-        if service_flags[x] == 'pg':
+    for x in list(range(len(rates))):
+
+        cap = genPs[x] * max_sched_per_q
+
+        print('\n\n', rates[x])
+        if service_times[x] == time:
             upper_bound = (1 / rates[x]) + tolerances[x]
             lower_bound = (1 / rates[x])
+            print(lower_bound, waiting_times[x], upper_bound)
 
             if (waiting_times[x] > upper_bound):
-                rates[x] = decrease_rate(rates[x])
-            elif (waiting_times[x] <= lower_bound):
-                rates[x] = increase_rate(rates[x])
+                rates[x] -= decrease_rate(rates[x])
 
-        elif service_flags[x] == 'idle':
+            # increase if possible, not to above cap
+            elif (waiting_times[x] <= lower_bound):
+                rates[x] = min(rates[x] + increase_rate(rates[x]), cap)
+
+        else:
             scale_tol = 2
             idle_time = time - service_times[x]
             upper_bound = (1 / rates[x]) + (scale_tol * tolerances[x])
 
             if idle_time > upper_bound:
-                rates[x] = decrease[x]
+                rates[x] -= decrease_rate(rates[x])
 
     return rates
 
 
+rates = [0.005, 0.01, 0.45, 0.23, 0.026, 0.074]
+genPs = [0.75] * 6
+service_flags = ['idle', 'pg', 'idle', 'idle', 'idle', 'pg']
+service_times = np.array([18, 34, 30, 33, 29, 34])
+waiting_times = np.array([18, 1, 1, 1, 16, 6])
+time = 35
+max_sched_per_q = 1
 
-
+print(adjust_rates(rates, time, genPs, max_sched_per_q,
+                   service_times, waiting_times, service_flags))
 
 
 def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
