@@ -29,7 +29,7 @@ def prep_dist(NumUsers: int, H_num: int,
         queues = list(range(NQs))
         shuffle(queues)
 
-        max_val = max_scheduled * ((NQs / H_num) * prob_param) / NQs
+        max_val = max_scheduled * (prob_param / H_num)
 
         # ensure using full space
         while (round(sum(probs), 4) != round(threshold, 4)):
@@ -57,8 +57,7 @@ def prep_dist(NumUsers: int, H_num: int,
 # for queue i is p_i.
 # pDist options: 'uBin' = uniform binomial
 #                'rBin' = random splitt of threshold amongst binomial NQs
-def gen_arrivals(max_submissions: int,
-                 NumUsers: int,
+def gen_arrivals(NumUsers: int,
                  pDist: str,
                  probs: list) -> np.ndarray:
 
@@ -68,7 +67,10 @@ def gen_arrivals(max_submissions: int,
     if ((pDist == 'uBin') or (pDist == 'rBin')):
 
         for x in range(NQs):
-            arrivals[x] = binom.rvs(max_submissions, probs[x], size=1)[0]
+            if probs[x] < 1:
+                arrivals[x] = binom.rvs(probs[x], size=1)[0]
+            else:
+                arrivals[x] =
 
     return arrivals
 
@@ -304,7 +306,6 @@ def model_probabilistic_link_gen(NumUsers: int, gen_prob: float,
 # failure_mechs: rq = return to queue, ss = stay scheduled
 # sched_type: base or weighted
 def simulate_queue_lengths(NumUsers: int, H_num: int,
-                           max_subs: int,
                            pDist: str, prob_param: float,
                            gen_prob: float,
                            failure_mech: str,
@@ -332,7 +333,7 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
 
     for x in range(iters):
         # Get submitted requests
-        arrivals = gen_arrivals(max_subs, NumUsers, pDist, probs)
+        arrivals = gen_arrivals(NumUsers, pDist, probs)
         # Update submission times
         for y in np.nonzero(arrivals):
             submission_times[y, x] = arrivals[y]
@@ -409,7 +410,7 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
                                          / observed_times_perQ[1, x])
 
     return (queue_lengths, observed_times_perQ[0, :], avrg_rates,
-            (probs * max_subs), waiting_dist_max, waiting_dist_min)
+            probs, waiting_dist_max, waiting_dist_min)
 
 
 ##########################################################################
@@ -420,7 +421,6 @@ def plot_queue_stability(q1: np.ndarray,
                          q3: np.ndarray,
                          NumUsers: int,
                          H_num: int,
-                         max_subs: int,
                          gen_prob: float,
                          threshold: float,
                          dist_fac: float,
@@ -430,8 +430,8 @@ def plot_queue_stability(q1: np.ndarray,
     cmap = plt.cm.get_cmap('plasma')
     inds = np.linspace(0, 0.85, 3)
     fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, figsize=(10, 8))
-    fig.suptitle('N = {}, H = {}, m = {}, p = {}, T = {}'.format(
-                 NumUsers, H_num, max_subs, gen_prob, threshold),
+    fig.suptitle('N = {}, H = {}, p = {}, T = {}'.format(
+                 NumUsers, H_num, gen_prob, threshold),
                  fontsize=28)
     ax1.plot(range(iters), q1, color=cmap(0),
              label='T - {}'.format(dist_fac * threshold))
@@ -456,7 +456,6 @@ def plot_waiting_time_dists(max_dist: list,
                             rates: list,
                             NumUsers: int,
                             H_num: int,
-                            max_subs: int,
                             figname: str) -> None:
 
     cmap = plt.cm.get_cmap('plasma')
@@ -482,7 +481,7 @@ def plot_individual_queues(q1: np.ndarray,
                            q2: np.ndarray,
                            q3: np.ndarray,
                            iters: int,
-                           NumUsers: int, H_num: int, max_subs: int,
+                           NumUsers: int, H_num: int,
                            wt: np.ndarray, rt: np.ndarray,
                            rr: list, dist_fac: float,
                            threshold: float,
@@ -503,7 +502,7 @@ def plot_individual_queues(q1: np.ndarray,
     plt.title('T - {}'.format((((dist_fac * threshold) // (1/1000)) / 1000)),
               fontsize=28)
     figname = '../Figures/PairRequest/IQs_LR_{}_{}_{}_{}_BelowT'.format(
-            NumUsers, H_num, max_subs, sched_type)
+            NumUsers, H_num, sched_type)
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
     plt.figure(figsize=(10, 8))
@@ -517,7 +516,7 @@ def plot_individual_queues(q1: np.ndarray,
     plt.legend(fontsize=20, framealpha=0.6, loc=1)
     plt.title('T', fontsize=28)
     figname = '../Figures/PairRequest/IQs_LR_{}_{}_{}_{}_AtT'.format(
-            NumUsers, H_num, max_subs, sched_type)
+            NumUsers, H_num, sched_type)
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
     plt.figure(figsize=(10, 8))
@@ -532,37 +531,37 @@ def plot_individual_queues(q1: np.ndarray,
     plt.title('T + {}'.format((((dist_fac * threshold) // (1/1000)) / 1000)),
               fontsize=28)
     figname = '../Figures/PairRequest/IQs_LR_{}_{}_{}_{}_AboveT'.format(
-            NumUsers, H_num, max_subs, sched_type)
+            NumUsers, H_num, sched_type)
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
 
 # Want to define plotting function which will be able to show various scenarios
 # with above and below threshold behaviour
 # Fignames: LR = less restricted
-def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
+def study_near_threshold(NumUsers: int, H_num: int,
                          pDist: str, gen_prob: float, failure_mech: str,
                          sched_type: str, max_sched_per_q: int,
                          iters: int,
                          dist_fac: float) -> None:
 
-    threshold = ((H_num * gen_prob / max_subs)
+    threshold = ((H_num * gen_prob)
                  // (1/10000)) / 10000  # Truncate at 4th place
 
     (q1, wt1, rt1, rr1,
-     waitMax1, waitMin1) = simulate_queue_lengths(NumUsers, H_num, max_subs,
+     waitMax1, waitMin1) = simulate_queue_lengths(NumUsers, H_num,
                                                   pDist,
                                                   (1 - dist_fac) * (threshold),
                                                   gen_prob, failure_mech,
                                                   sched_type,
                                                   max_sched_per_q, iters)
     (q2, wt2, rt2, rr2,
-     waitMax2, waitMin2) = simulate_queue_lengths(NumUsers, H_num, max_subs,
+     waitMax2, waitMin2) = simulate_queue_lengths(NumUsers, H_num,
                                                   pDist, threshold, gen_prob,
                                                   failure_mech,
                                                   sched_type,
                                                   max_sched_per_q, iters)
     (q3, wt3, rt3, rr3,
-     waitMax3, waitMin3) = simulate_queue_lengths(NumUsers, H_num, max_subs,
+     waitMax3, waitMin3) = simulate_queue_lengths(NumUsers, H_num,
                                                   pDist,
                                                   (1 + dist_fac) * threshold,
                                                   gen_prob, failure_mech,
@@ -581,18 +580,18 @@ def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
 
         p_whole = int(100 * gen_prob)
         figname = '../Figures/PairRequest/QStab_LR_{}_{}_{}_{}_{}_{}'.format(
-                NumUsers, H_num, p_whole, max_subs, pDist, sched_type)
+                NumUsers, H_num, p_whole, pDist, sched_type)
 
-        plot_queue_stability(ql1, ql2, ql3, NumUsers, H_num, max_subs,
+        plot_queue_stability(ql1, ql2, ql3, NumUsers, H_num,
                              gen_prob, threshold, dist_fac, iters, figname)
 
     pltWTD = True
     if pltWTD:
         figname = '../Figures/PairRequest/LR_WTD_{}_{}_{}_{}_{}_{}'.format(
-                NumUsers, H_num, max_subs, sched_type,
+                NumUsers, H_num, sched_type,
                 round(1/max(rates)), round(1/min(rates)))
         plot_waiting_time_dists(waitMax1, waitMin1, rt1,
-                                NumUsers, H_num, max_subs, figname)
+                                NumUsers, H_num, figname)
 
     pltIdvQs = True
     if pltIdvQs:
@@ -602,7 +601,7 @@ def study_near_threshold(NumUsers: int, H_num: int, max_subs: int,
         rr = np.array([rr1, rr2, rr3])
 
         plot_individual_queues(q1, q2, q3, iters, NumUsers,
-                               H_num, max_subs,
+                               H_num,
                                wt, rt, rr,
                                dist_fac, threshold, sched_type)
 

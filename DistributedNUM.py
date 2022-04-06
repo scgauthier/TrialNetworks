@@ -74,7 +74,6 @@ def adjust_rates(rates: list, time: int,
 
 
 def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
-                           max_subs: int,
                            pDist: str, prob_param: float,
                            gen_prob: float,
                            sched_type: str,
@@ -103,7 +102,7 @@ def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
 
     for x in range(iters):
         # Get submitted requests
-        arrivals = gen_arrivals(max_subs, NumUsers, pDist, probs)
+        arrivals = gen_arrivals(NumUsers, pDist, probs)
         # Update submission times
         for y in np.nonzero(arrivals):
             submission_times[y, x] = arrivals[y]
@@ -183,4 +182,4 @@ def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
                                          / observed_times_perQ[1, x])
 
     return (queue_lengths, observed_times_perQ[0, :], avrg_rates,
-            (probs * max_subs), waiting_dist_max, waiting_dist_min)
+            probs, waiting_dist_max, waiting_dist_min)
