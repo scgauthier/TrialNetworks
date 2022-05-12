@@ -84,7 +84,7 @@ def gen_arrivals(NumUsers: int,
 # and scheduling it, reducing the queue length in the calculation by 1,
 # and repeating H-1 times.
 # This method performs much better for large NQs and H>2
-def flexible_shortcut(H_num: int,
+def flexible_schedule(H_num: int,
                       NQs: int,
                       current_queue_lengths: np.ndarray,
                       marked: np.ndarray,
@@ -117,7 +117,7 @@ def flexible_shortcut(H_num: int,
     return max_lengths
 
 
-def weighted_flex_shortcut(H_num: int, NQs: int,
+def weighted_flex_schedule(H_num: int, NQs: int,
                            probs: list,
                            current_queue_lengths: np.ndarray,
                            marked: np.ndarray,
@@ -252,12 +252,12 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
         # specification of max scheduled per q
 
         if sched_type == 'base':
-            schedule = flexible_shortcut(H_num, NQs,
+            schedule = flexible_schedule(H_num, NQs,
                                          queue_lengths[:, x],
                                          marked,
                                          max_sched_per_q)
         elif sched_type == 'weighted':
-            schedule = weighted_flex_shortcut(H_num, NQs,
+            schedule = weighted_flex_schedule(H_num, NQs,
                                               probs,
                                               queue_lengths[:, x],
                                               marked,
