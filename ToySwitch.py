@@ -1,4 +1,5 @@
 import numpy as np
+from math import floor
 import matplotlib.pyplot as plt
 from scipy.special import binom as bc
 from scipy.stats import binom
@@ -68,112 +69,14 @@ def gen_arrivals(NumUsers: int,
 
         for x in range(NQs):
             if probs[x] < 1:
-                arrivals[x] = binom.rvs(probs[x], size=1)[0]
-            else:
-                arrivals[x] =
+                arrivals[x] = binom.rvs(1, probs[x], size=1)[0]
+            else:  # deal with rates > 1
+                int_part = floor(probs[x])
+                prob = probs[x] - floor(probs[x])
+                arrivals[x] = (int_part
+                               + binom.rvs(1, prob, size=1)[0])
 
     return arrivals
-
-
-# Here network graph just corresponds to all ordered pairs of nodes, i.e.
-# the distinct VOQs
-def gen_network_graph(NumUsers: int) -> Tuple:
-    Network_graph = []
-
-    for requester in range(NumUsers-1):
-        for partner in range(requester, NumUsers-1):
-            Network_graph.append((requester, partner))
-
-    return Network_graph
-
-
-# All distinct ways of choosing h different VOQs
-# Used to generate pool of possible schedules
-def get_size_h_schedules(h: int, NumUsers: int) -> list:
-    pool_size = int(bc(NumUsers, 2))
-    return list(combinations(range(pool_size), h))
-
-
-# In case want to be able to schedule one VOQ more than once per slot
-# Used to generate pool of possible schedules
-def get_size_h_flexible_schedules(h: int,
-                                  NumUsers: int) -> list:
-    pool_size = int(bc(NumUsers, 2))
-    return list(combinations_with_replacement(range(pool_size), h))
-
-
-# Used when failure mechanism is 'stay scheduled' (and scheduling not flexible)
-# Removes the queues staying scheduled from schedule search space
-def restrict_max_weight_search(marked: np.ndarray,
-                               possible_schedules: Tuple,
-                               current_queue_lengths: np.ndarray) -> Tuple:
-    infeasible = []
-    for schedule in possible_schedules:
-        for x in range(np.shape(marked)[0]):
-            if (marked[x] > 0) and (x in schedule):
-                infeasible.append(schedule)
-                break
-
-    for schedule in infeasible:
-        possible_schedules.remove(schedule)
-
-    return possible_schedules
-
-
-def select_max_weight_schedule(possible_schedules: Tuple,
-                               current_queue_lengths: np.ndarray) -> Tuple:
-
-    max_schedule = np.zeros(np.shape(current_queue_lengths)[0])
-    max_weight = 0
-
-    for schedule in possible_schedules:
-        weight = 0
-        array_schedule = np.zeros(np.shape(current_queue_lengths)[0])
-        current_lengths = np.copy(current_queue_lengths)
-        for edge in schedule:
-            weight += current_lengths[edge]
-            if current_lengths[edge] > 0:
-                array_schedule[edge] += 1
-            current_lengths[edge] -= 1
-
-        if weight > max_weight:
-            max_weight = weight
-            max_schedule = array_schedule
-        elif weight == max_weight:
-            p = random()
-            if p >= 0.5:
-                max_schedule = array_schedule
-    return max_schedule
-
-
-# For the less restricted switch with inflexible scheduling, the MaxWeight
-# scheduling procedure simply reduces to choosing the H longest queues for
-# scheduling at each time step
-# This method performs much better for large NQs and H>2
-def shortcut_max_weight_schedule(H_num: int,
-                                 NQs: int,
-                                 current_queue_lengths: np.ndarray,
-                                 marked: np.ndarray,
-                                 failure_mech: str) -> np.ndarray:
-
-    QLs = np.copy(current_queue_lengths)
-    max_lengths = np.zeros(NQs)
-    if failure_mech == 'ss':
-        for x in range(NQs):
-            if marked[x] > 0:
-                QLs[x] = 0  # Don't allow double scheduling
-                max_lengths[x] = 1
-        num_failures = int(np.sum(marked))
-        H_num -= num_failures
-
-    max_length_inds = np.argpartition(QLs, -H_num)[-H_num:]
-    # print(max_length_inds, 'max length inds')
-    for x in max_length_inds:
-        if QLs[x] > 0:  # don't sechedule empty queues
-            max_lengths[x] = 1
-
-    # print(max_lengths, 'schedule generated \n\n')
-    return max_lengths
 
 
 # For the less restricted switch with flexible scheduling, the MaxWeight
@@ -185,66 +88,32 @@ def flexible_shortcut(H_num: int,
                       NQs: int,
                       current_queue_lengths: np.ndarray,
                       marked: np.ndarray,
-                      failure_mech: str,
                       max_sched_per_q: int) -> np.ndarray:
 
     QLs = np.copy(current_queue_lengths)
     max_lengths = np.zeros(NQs)
-    if failure_mech == 'ss':
-        QLs = QLs - marked
-        num_failures = int(np.sum(marked))
-        max_lengths = marked
-        H_num -= num_failures
+
+    # for making tie breaking random in argpartition
+    paired_up = []
+    for x in range(NQs):
+        paired_up.append((QLs[x], x))
+    random.shuffle(paired_up)
+    for x in range(NQs):
+        QLs[x] = paired_up[x][0]
 
     for x in range(H_num):
         max_length_ind = np.argpartition(QLs, -1)[-1:]
+        actual_ind = paired_up[max_length_ind[0]][1]
         # don't sechedule empty queues
         if QLs[max_length_ind[0]] > 0:
-            max_lengths[max_length_ind[0]] += 1.0
+            max_lengths[actual_ind] += 1.0
         # Cost function -1 to prevent scheduling same q H times
         QLs[max_length_ind[0]] -= 1
 
         # Check if max number of times scheduled reached
-        if max_lengths[max_length_ind[0]] == max_sched_per_q:
+        if max_lengths[actual_ind] == max_sched_per_q:
             QLs[max_length_ind[0]] = 0
 
-    return max_lengths
-
-
-def weighted_strict_shortcut(H_num: int, NQs: int,
-                             probs: list,
-                             current_queue_lengths: np.ndarray,
-                             marked: np.ndarray,
-                             failure_mech: str,
-                             service_times: np.ndarray,
-                             time: int) -> np.ndarray:
-    QLs = np.copy(current_queue_lengths)
-    weights = np.zeros(NQs)
-
-    # weight by time elapsed since service / requested rate
-    for q in range(NQs):
-        weights[q] = max(1, (time - service_times[q]) / probs[q])
-
-    # print(QLs, 'start schedule queue lengths \n')
-    max_lengths = np.zeros(NQs)
-    if failure_mech == 'ss':
-        for x in range(NQs):
-            if marked[x] > 0:
-                QLs[x] = 0  # Don't allow double scheduling
-                max_lengths[x] = 1
-        num_failures = int(np.sum(marked))
-        H_num -= num_failures
-        # print(marked, 'marked \n', QLs, 'new schedule queue lengths \n')
-        # print(H_num, 'H \n')
-
-    QLs = weights * QLs
-    max_length_inds = np.argpartition(QLs, -H_num)[-H_num:]
-    # print(max_length_inds, 'max length inds')
-    for x in max_length_inds:
-        if QLs[x] > 0:  # don't sechedule empty queues
-            max_lengths[x] = 1
-
-    # print(max_lengths, 'schedule generated \n\n')
     return max_lengths
 
 
@@ -252,7 +121,6 @@ def weighted_flex_shortcut(H_num: int, NQs: int,
                            probs: list,
                            current_queue_lengths: np.ndarray,
                            marked: np.ndarray,
-                           failure_mech: str,
                            service_times: np.ndarray,
                            time: int,
                            max_sched_per_q: int) -> np.ndarray:
@@ -265,23 +133,28 @@ def weighted_flex_shortcut(H_num: int, NQs: int,
     for q in range(NQs):
         weights[q] = max(1, (time - service_times[q]) / probs[q])
 
-    if failure_mech == 'ss':
-        QLs = QLs - marked
-        num_failures = int(np.sum(marked))
-        max_lengths = marked
-        H_num -= num_failures
-
+    # apply weights
     QLs = weights * QLs
+
+    # for making tie breaking random in argpartition
+    paired_up = []
+    for x in range(NQs):
+        paired_up.append((QLs[x], x))
+    random.shuffle(paired_up)
+    for x in range(NQs):
+        QLs[x] = paired_up[x][0]
+
     for x in range(H_num):
         max_length_ind = np.argpartition(QLs, -1)[-1:]
+        actual_ind = paired_up[max_length_ind[0]][1]
         # don't sechedule empty queues
         if QLs[max_length_ind[0]] > 0:
-            max_lengths[max_length_ind[0]] += 1.0
+            max_lengths[actual_ind] += 1.0
         # Cost function -1 to prevent scheduling same q H times
         QLs[max_length_ind[0]] -= 1
 
         # Check if max number of times scheduled reached
-        if max_lengths[max_length_ind[0]] == max_sched_per_q:
+        if max_lengths[actual_ind] == max_sched_per_q:
             QLs[max_length_ind[0]] = 0
 
     return max_lengths
@@ -303,12 +176,10 @@ def model_probabilistic_link_gen(NumUsers: int, gen_prob: float,
 ############################################################
 # Main simulation ##########################################
 
-# failure_mechs: rq = return to queue, ss = stay scheduled
 # sched_type: base or weighted
 def simulate_queue_lengths(NumUsers: int, H_num: int,
                            pDist: str, prob_param: float,
                            gen_prob: float,
-                           failure_mech: str,
                            sched_type: str,
                            max_sched_per_q: int,
                            iters: int) -> Tuple[np.ndarray, np.ndarray,
@@ -384,14 +255,12 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
             schedule = flexible_shortcut(H_num, NQs,
                                          queue_lengths[:, x],
                                          marked,
-                                         failure_mech,
                                          max_sched_per_q)
         elif sched_type == 'weighted':
             schedule = weighted_flex_shortcut(H_num, NQs,
                                               probs,
                                               queue_lengths[:, x],
                                               marked,
-                                              failure_mech,
                                               service_times,
                                               x,
                                               max_sched_per_q)
@@ -452,28 +321,62 @@ def plot_queue_stability(q1: np.ndarray,
 
 
 def plot_waiting_time_dists(max_dist: list,
-                            min_dist: list,
                             rates: list,
                             NumUsers: int,
                             H_num: int,
                             figname: str) -> None:
 
+    # Avrg over samples
+    NS = 10
+    scaling = 1.01
+    # min_Av, max_Av = [1/min(rates)] * (NS - 1), [1/max(rates)] * (NS - 1)
+    max_Av = [1/max(rates)] * (NS - 1)
+    for x in range(len(max_dist) - (NS - 1)):
+        sum = 0
+        for y in range(NS):
+            sum += max_dist[x - y]
+        max_Av.append(sum / NS)
+
+    # for x in range(len(min_dist) - (NS - 1)):
+    #     sum = 0
+    #     for y in range(NS):
+    #         sum += min_dist[x - y]
+    #     min_Av.append(sum / NS)
+
     cmap = plt.cm.get_cmap('plasma')
-    fig, (ax1, ax2) = plt.subplots(2, sharex=False, figsize=(10, 8))
+    plt.figure(figsize=(10, 8))
+    # fig, (ax1, ax2) = plt.subplots(2, sharex=False, figsize=(10, 8))
 
-    ax1.plot(range(len(max_dist)), max_dist, color=cmap(0),
+    plt.plot(range(len(max_dist)), max_dist, color=cmap(0),
              label='Max Rate Request')
-    ax1.plot(range(len(max_dist)), len(max_dist)*[1/(max(rates))],
+    plt.plot(range(len(max_dist)), max_Av, color=cmap(0.75),
+             label='{} Point Av'.format(NS))
+    plt.plot(range(len(max_dist)), len(max_dist)*[scaling/(max(rates))],
              '--', color=cmap(0.9))
 
-    ax2.plot(range(len(min_dist)), min_dist, color=cmap(0.5),
-             label='Min Rate Request')
-    ax2.plot(range(len(min_dist)), len(min_dist)*[1/min(rates)],
-             '--', color=cmap(0.9))
+    counts_over = 0
+    for x in max_Av:
+        if x > (scaling / max(rates)):
+            counts_over += 1
+    print("Counts over = ", counts_over)
 
-    ax2.legend(fontsize=22, framealpha=0.6, loc=2)
+    # ax1.plot(range(len(max_dist)),
+    #          len(max_dist)*[1.5 / max(rates)],
+    #          '--', color=cmap(0.95))
 
-    ax1.legend(fontsize=22, framealpha=0.6, loc=2)
+    # ax2.plot(range(len(min_dist)), min_dist, color=cmap(0.5),
+    #          label='Min Rate Request')
+    # ax2.plot(range(len(min_dist)), min_Av, color=cmap(0.25),
+    #          label='{} Point Av'.format(NS))
+    # ax2.plot(range(len(min_dist)), len(min_dist)*[1/min(rates)],
+    #          '--', color=cmap(0.9))
+    # ax2.plot(range(len(min_dist)),
+    #          len(min_dist)*[2.5 / min(rates)],
+    #          '--', color=cmap(0.95))
+    #
+    # ax2.legend(fontsize=22, framealpha=0.6, loc=2)
+    #
+    plt.legend(fontsize=22, framealpha=0.6, loc=2)
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
 
@@ -501,7 +404,7 @@ def plot_individual_queues(q1: np.ndarray,
     plt.legend(fontsize=20, framealpha=0.6, loc=1)
     plt.title('T - {}'.format((((dist_fac * threshold) // (1/1000)) / 1000)),
               fontsize=28)
-    figname = '../Figures/PairRequest/IQs_LR_{}_{}_{}_{}_BelowT'.format(
+    figname = '../Figures/PairRequest/IQs_LR_{}_{}_{}_BelowT'.format(
             NumUsers, H_num, sched_type)
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
@@ -515,7 +418,7 @@ def plot_individual_queues(q1: np.ndarray,
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
     plt.legend(fontsize=20, framealpha=0.6, loc=1)
     plt.title('T', fontsize=28)
-    figname = '../Figures/PairRequest/IQs_LR_{}_{}_{}_{}_AtT'.format(
+    figname = '../Figures/PairRequest/IQs_LR_{}_{}_{}_AtT'.format(
             NumUsers, H_num, sched_type)
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
@@ -530,7 +433,7 @@ def plot_individual_queues(q1: np.ndarray,
     plt.legend(fontsize=20, framealpha=0.6, loc=2)
     plt.title('T + {}'.format((((dist_fac * threshold) // (1/1000)) / 1000)),
               fontsize=28)
-    figname = '../Figures/PairRequest/IQs_LR_{}_{}_{}_{}_AboveT'.format(
+    figname = '../Figures/PairRequest/IQs_LR_{}_{}_{}_AboveT'.format(
             NumUsers, H_num, sched_type)
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
@@ -539,7 +442,7 @@ def plot_individual_queues(q1: np.ndarray,
 # with above and below threshold behaviour
 # Fignames: LR = less restricted
 def study_near_threshold(NumUsers: int, H_num: int,
-                         pDist: str, gen_prob: float, failure_mech: str,
+                         pDist: str, gen_prob: float,
                          sched_type: str, max_sched_per_q: int,
                          iters: int,
                          dist_fac: float) -> None:
@@ -551,24 +454,21 @@ def study_near_threshold(NumUsers: int, H_num: int,
      waitMax1, waitMin1) = simulate_queue_lengths(NumUsers, H_num,
                                                   pDist,
                                                   (1 - dist_fac) * (threshold),
-                                                  gen_prob, failure_mech,
-                                                  sched_type,
+                                                  gen_prob, sched_type,
                                                   max_sched_per_q, iters)
     (q2, wt2, rt2, rr2,
      waitMax2, waitMin2) = simulate_queue_lengths(NumUsers, H_num,
                                                   pDist, threshold, gen_prob,
-                                                  failure_mech,
                                                   sched_type,
                                                   max_sched_per_q, iters)
     (q3, wt3, rt3, rr3,
      waitMax3, waitMin3) = simulate_queue_lengths(NumUsers, H_num,
                                                   pDist,
                                                   (1 + dist_fac) * threshold,
-                                                  gen_prob, failure_mech,
-                                                  sched_type,
+                                                  gen_prob, sched_type,
                                                   max_sched_per_q, iters)
 
-    pltQStab = True
+    pltQStab = False
     if pltQStab:
 
         ql1, ql2, ql3 = np.zeros(iters), np.zeros(iters), np.zeros(iters)
@@ -579,7 +479,7 @@ def study_near_threshold(NumUsers: int, H_num: int,
             ql3[x] = np.sum(q3[:, x], axis=0)
 
         p_whole = int(100 * gen_prob)
-        figname = '../Figures/PairRequest/QStab_LR_{}_{}_{}_{}_{}_{}'.format(
+        figname = '../Figures/PairRequest/QStab_LR_{}_{}_{}_{}_{}'.format(
                 NumUsers, H_num, p_whole, pDist, sched_type)
 
         plot_queue_stability(ql1, ql2, ql3, NumUsers, H_num,
@@ -587,13 +487,16 @@ def study_near_threshold(NumUsers: int, H_num: int,
 
     pltWTD = True
     if pltWTD:
-        figname = '../Figures/PairRequest/LR_WTD_{}_{}_{}_{}_{}_{}'.format(
-                NumUsers, H_num, sched_type,
-                round(1/max(rates)), round(1/min(rates)))
-        plot_waiting_time_dists(waitMax1, waitMin1, rt1,
+        figname = '../Figures/PairRequest/BT_WTD_{}_{}_{}'.format(
+                NumUsers, H_num, sched_type)
+        plot_waiting_time_dists(waitMax1, rr1,
+                                NumUsers, H_num, figname)
+        figname = '../Figures/PairRequest/AT_WTD_{}_{}_{}'.format(
+                NumUsers, H_num, sched_type)
+        plot_waiting_time_dists(waitMax3, rr3,
                                 NumUsers, H_num, figname)
 
-    pltIdvQs = True
+    pltIdvQs = False
     if pltIdvQs:
 
         wt = np.array([wt1, wt2, wt3])
@@ -605,9 +508,8 @@ def study_near_threshold(NumUsers: int, H_num: int,
                                wt, rt, rr,
                                dist_fac, threshold, sched_type)
 
-    print(wt1, 1/rt1, rt1, sum(rt1), '\n\n', wt2, 1/rt2, rt2, sum(rt2),
-          '\n\n', wt3, 1/rt3, rt3, sum(rt3))
+    # print(wt1, 1/rt1, rt1, sum(rt1), '\n\n', wt2, 1/rt2, rt2, sum(rt2),
+    #       '\n\n', wt3, 1/rt3, rt3, sum(rt3))
 
 
-# study_near_threshold(4, 2, 1, 'rBin', 0.75, 'rq', 'strict', 1, 100000, 0.05)
-# print(simulate_queue_lengths(4, 2, 1, 'rBin', 6/4, 0.75, 'rq', 'strict', 10))
+study_near_threshold(4, 2, 'uBin', 0.75, 'base', 1, 10000, 0.1)
