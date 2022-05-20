@@ -62,6 +62,20 @@ def session_id_to_users(NumUsers: int, session_id: int) -> list[int]:
     return [x - 1, y - 1]
 
 
+# takes as input the total number of sessions
+# Outputs a list of lists, ordered by user number, of S(u) for each u.
+def partition_sessions_by_user(NumUsers: int, NQs: int) -> np.ndarray:
+
+    userSessions = np.zeros((NumUsers, NumUsers - 1))
+    for x in range(NQs):
+        min_entries = np.argmin(userSessions, axis=1)
+        user_pair = session_id_to_users(NumUsers, x + 1)
+        for u in user_pair:
+            userSessions[u, min_entries[u]] = x + 1
+
+    return userSessions
+
+
 def define_tolerances(rates: list) -> list:
 
     tolerances = []
