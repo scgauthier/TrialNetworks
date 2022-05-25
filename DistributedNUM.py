@@ -2,10 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import binom as bc
 from typing import Tuple, List
-from math import sqrt
 
-from ToySwitch import prep_dist, gen_arrivals, model_probabilistic_link_gen
-from ToySwitch import flexible_schedule, weighted_flex_schedule
+from ToySwitch import gen_arrivals, model_probabilistic_link_gen
+from ToySwitch import flexible_schedule
 from ToySwitch import plot_queue_stability, plot_individual_queues
 from ToySwitch import plot_waiting_time_dists
 
@@ -76,76 +75,64 @@ def partition_sessions_by_user(NumUsers: int, NQs: int) -> np.ndarray:
     return userSessions
 
 
-def define_tolerances(rates: list) -> list:
+def update_prices(NumUsers: int, userSessions: np.ndarray,
+                  lambda_Switch: float, user_max_rates: list,
+                  lastT_queue_lengths: np.ndarray) -> list[int]:
 
-    tolerances = []
-    for rt in rates:
-        # temp tolerances are 20% of waiting time
-        # tolerances.append(0.2 * 1/rt)
-        tolerances.append(1 * (1 / sqrt(rt * (1 - rt))))
-    return tolerances
+    price_vector = []
+    # centralized price is total queue length at each time step
+    # probably needs to be replaced as estimation of queue length at t + 1
+    # based on q(t) sum of rates, and service rate
+    price_vector.append(np.sum(lastT_queue_lengths) / lambda_Switch)
+
+    for u in range(NumUsers):
+        p_u = 0
+        for session in userSessions[u]:
+            # each user price is sum over queue lengths from their sessions
+            # probably needs to be replaced also
+            p_u += lastT_queue_lengths[int(session - 1)]
+        # Scaling of price, currently by 1/lambda*_u
+        print(p_u, 'before')
+        p_u = p_u / user_max_rates[u]
+        print(p_u, 'after \n\n')
+        price_vector.append(p_u)
+
+    return price_vector
 
 
-# Note: I think additive increase multiplicative decrease can be
-# accomplished by using some fraction of p_gen as the additive increase.
-# Note that p_gen is a local parameter to each node.
-def decrease_rate(rate: float) -> float:
-    # return (0.1 * rate**2)
-    return (0.01 * rate)
+# for now: assume log utility functions with weights all equal to constraints
+# this performs gradient projection
+def update_rates(NumUsers: int, NQs: int,
+                 price_vector: list[int],
+                 session_min_rates: list,
+                 session_max_rates: list) -> list[float]:
 
+    rates = []
+    for s in range(NQs):
+        user_pair = session_id_to_users(NumUsers, s + 1)
 
-def increase_rate(rate: float, p_gen: float) -> float:
-    # return (0.1 * rate**(1/4))
-    return (0.005 * p_gen)
+        p_us = 0
+        for u in user_pair:
+            p_us += price_vector[1 + u]
 
-
-# service times = most recent service time
-# waiting times = waiting time most recent = interval observed b/w service)
-def adjust_rates(rates: list, time: int,
-                 genPs: list, max_sched_per_q: int,
-                 service_times: np.ndarray,
-                 waiting_times: np.ndarray,
-                 previous_WT: np.ndarray) -> list:
-
-    tolerances = define_tolerances(rates)
-
-    for x in list(range(len(rates))):
-        global_scale = 10 * 10
-        # av_wt = ((waiting_times[x] + previous_WT[x]) / 2)
-        av_wt = ((0.55 * waiting_times[x])
-                 + (0.45 * previous_WT[x]))
-        cap = genPs[x] * max_sched_per_q
-        min_rate = genPs[x] / global_scale
-
-        if ((service_times[x] == time) and (time > 0)):
-            upper_bound = (1 / rates[x]) + tolerances[x]
-            lower_bound = (1 / rates[x] + (tolerances[x] / 10))
-            # bound = (1 / rates[x]) + tolerances[x]
-
-            if (av_wt > upper_bound):
-                rates[x] -= decrease_rate(rates[x])
-                rates[x] = max(rates[x], min_rate)
-
-            # increase if possible, not to above cap
-            elif (av_wt <= lower_bound):
-                rates[x] = min(rates[x] + increase_rate(rates[x], genPs[x]),
-                               cap)
-                rates[x] = max(rates[x], min_rate)
-
+        price = price_vector[0] + p_us
+        if price > 0:
+            rate = max(session_min_rates[s], 1/price)
         else:
-            scale_tol = 1.5
-            idle_time = time - service_times[x]
-            upper_bound = (1 / rates[x]) + (scale_tol * tolerances[x])
-
-            if idle_time > upper_bound:
-                rates[x] -= decrease_rate(rates[x])
-                rates[x] = max(rates[x], min_rate)
+            # This value is meant to represent infinity -- just should be
+            # larger than other scales in problem, represents 1/price when
+            # price is zero
+            rate = NQs
+        rate = min(rate, session_max_rates[s])
+        rates.append(rate)
 
     return rates
 
 
 def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
-                           pDist: str, prob_param: float,
+                           threshold: float,
+                           user_max_rates: list,
+                           session_min_rates: list,
                            gen_prob: float,
                            sched_type: str,
                            max_sched_per_q: int,
@@ -155,118 +142,66 @@ def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
 
     NQs = int(bc(NumUsers, 2))
     queue_lengths = np.zeros((NQs, iters))
-    submission_times = np.zeros((NQs, iters))
-    waiting_times_perQ = np.zeros((2, NQs))
-    observed_times_perQ = np.zeros((5, NQs))
-    waiting_dist_max = []
-    waiting_dist_min = []
-    avrg_rates = np.zeros(NQs)
-    service_times = np.zeros(NQs)
     rate_track = np.zeros((NQs, iters))
     schedule = np.zeros(NQs)
-    marked = np.zeros(NQs)
 
-    # for now, all use same p_gen
-    genPs = NQs * [gen_prob]
+    # record user sessions
+    userSessions = partition_sessions_by_user(NumUsers, NQs)
+    # session max rates
+    session_max_rates = [max_sched_per_q * gen_prob] * NQs
+    # initial price vector (zero for empty queues)
+    price_vector = [0] * (1 + NumUsers)
+
     # set initial requests
-    probs = prep_dist(NumUsers, H_num, prob_param, pDist, max_sched_per_q)
-    # track index of initial max and min requests
-    ratemax, ratemin = probs.index(max(probs)), probs.index(min(probs))
-    rate_track[:, 0] = probs
+    rates = update_rates(NumUsers, NQs, price_vector, session_min_rates,
+                         session_max_rates)
+
+    rate_track[:, 0] = rates
 
     for x in range(iters):
         # Get submitted requests
-        arrivals = gen_arrivals(NumUsers, pDist, probs)
-        # Update submission times
-        for y in np.nonzero(arrivals):
-            submission_times[y, x] = arrivals[y]
+        arrivals = gen_arrivals(NumUsers, rates)
 
-        # based on prev link gen, sources update rates
-        # essentially assumes 1 timestep delay b/w state gen and rate changes
-        probs = adjust_rates(probs, (x - 1), genPs, max_sched_per_q,
-                             observed_times_perQ[2, :],
-                             observed_times_perQ[3, :],
-                             observed_times_perQ[4, :])
-        rate_track[:, x] = probs
-        # print(probs, " Sum: ", sum(probs))
+        if x > 0:
+            # based on prices, sources update rates
+            price_vector = update_prices(NumUsers, userSessions,
+                                         threshold, user_max_rates,
+                                         queue_lengths[:, x - 1])
+            rates = update_rates(NumUsers, NQs, price_vector,
+                                 session_min_rates, session_max_rates)
 
-        # for current schedule, do link gen
-        schedule, marked = model_probabilistic_link_gen(NumUsers,
-                                                        gen_prob,
-                                                        schedule)
+            rate_track[:, x] = rates
 
-        # Update service times:
-        # 2 notions: waiting_times: time requests wait in q b/w sub and served
-        #          : observed_times: time between successive served requests
-        for y in np.nonzero(schedule)[0]:
-            for z in range(int(schedule[y])):
-                try:
-                    subs = np.nonzero(submission_times[y, 0:x])[0]
-                    # Update waiting times for served request
-                    # -1 since can't be served until next slot
-                    waiting_times_perQ[0, y] += max(x - subs[0] - 1,
-                                                    0)
-                    # Clear served requests from tracking
-                    submission_times[y, subs[0]] -= 1
-                    # Update number requests served
-                    waiting_times_perQ[1, y] += 1
-                except IndexError:
-                    continue
-                # Sum service intervals
-                service_int = x - observed_times_perQ[2, y]
-                observed_times_perQ[0, y] += service_int
-                observed_times_perQ[1, y] += 1
-                observed_times_perQ[2, y] = x  # update service time
-                # store previous waiting times
-                observed_times_perQ[4, y] = observed_times_perQ[3, y]
-                observed_times_perQ[3, y] = service_int  # update waiting
+            # for current schedule, do link gen
+            schedule = model_probabilistic_link_gen(NumUsers,
+                                                    gen_prob,
+                                                    schedule)
 
-                if y == ratemax:
-                    waiting_dist_max.append(service_int)
-                elif y == ratemin:
-                    waiting_dist_min.append(service_int)
-
-            service_times[y] = x
-
-        # Update queue lengths at x based on lengths at x-1, schedule from x-1,
-        # successful link gen at x, and arrivals at x
-        # Essentially lengths by end of x
-        queue_lengths[:, x] = (queue_lengths[:, x-1] + arrivals[:]
-                               - schedule[:])
-
-        # replace with schedule types normal and flexible and
-        # specification of max scheduled per q
+            # Update queue lengths at x based on lengths at x-1, schedule
+            # from x-1,
+            # successful link gen at x, and arrivals at x
+            # Essentially lengths by end of x
+            queue_lengths[:, x] = (queue_lengths[:, x-1] + arrivals[:]
+                                   - schedule[:])
+        else:
+            queue_lengths[:, x] = arrivals[:]
 
         if sched_type == 'base':
             schedule = flexible_schedule(H_num, NQs,
                                          queue_lengths[:, x],
-                                         marked,
                                          max_sched_per_q)
-        elif sched_type == 'weighted':
-            schedule = weighted_flex_schedule(H_num, NQs,
-                                              probs,
-                                              queue_lengths[:, x],
-                                              marked,
-                                              service_times,
-                                              x,
-                                              max_sched_per_q)
+        # if want to use a weighted form of scheduling, need to specify how
+        # elif sched_type == 'weighted':
+        #     schedule = weighted_flex_schedule(H_num, NQs,
+        #                                       rates,
+        #                                       queue_lengths[:, x],
+        #                                       x,
+        #                                       max_sched_per_q)
         else:
             print('Invalid scheduling type specified')
             return
 
-    for x in range(NQs):
-        if waiting_times_perQ[1, x] > 0:
-            waiting_times_perQ[0, x] = (waiting_times_perQ[0, x]
-                                        / waiting_times_perQ[1, x])
-
-        avrg_rates[x] = waiting_times_perQ[1, x] / iters
-
-        if observed_times_perQ[1, x] > 0:
-            observed_times_perQ[0, x] = (observed_times_perQ[0, x]
-                                         / observed_times_perQ[1, x])
-
-    return (queue_lengths, observed_times_perQ[0, :], avrg_rates,
-            probs, waiting_dist_max, waiting_dist_min, rate_track)
+    return (queue_lengths, rate_track)
 
 
 def plot_total_rates(rates: np.ndarray, NumUsers: int, H_num: int,
@@ -323,7 +258,7 @@ def plot_rate_profile(all_rates: List[np.ndarray], NumUsers: int,
 
 
 def study_balance_near_threshold(NumUsers: int, H_num: int,
-                                 pDist: str, gen_prob: float,
+                                 gen_prob: float,
                                  sched_type: str, max_sched_per_q: int,
                                  iters: int,
                                  dist_fac: float) -> None:
@@ -333,7 +268,7 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
 
     (q1, wt1, rt1, rr1,
      waitMax1, waitMin1,
-     rate_track_1) = sim_QL_w_rate_feedback(NumUsers, H_num, pDist,
+     rate_track_1) = sim_QL_w_rate_feedback(NumUsers, H_num,
                                             (1 - dist_fac) * (threshold),
                                             gen_prob,
                                             sched_type,
@@ -341,12 +276,12 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
     (q2, wt2, rt2, rr2,
      waitMax2, waitMin2,
      rate_track_2) = sim_QL_w_rate_feedback(NumUsers, H_num,
-                                            pDist, threshold, gen_prob,
+                                            threshold, gen_prob,
                                             sched_type,
                                             max_sched_per_q, iters)
     (q3, wt3, rt3, rr3,
      waitMax3, waitMin3,
-     rate_track_3) = sim_QL_w_rate_feedback(NumUsers, H_num, pDist,
+     rate_track_3) = sim_QL_w_rate_feedback(NumUsers, H_num,
                                             (1 + dist_fac) * threshold,
                                             gen_prob,
                                             sched_type,
@@ -363,8 +298,8 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
             ql3[x] = np.sum(q3[:, x], axis=0)
 
         p_whole = int(100 * gen_prob)
-        figname = '../Figures/PairRequest/QStab_LR_{}_{}_{}_{}_{}'.format(
-                NumUsers, H_num, p_whole, pDist, sched_type)
+        figname = '../Figures/PairRequest/QStab_LR_{}_{}_{}_{}'.format(
+                NumUsers, H_num, p_whole, sched_type)
 
         plot_queue_stability(ql1, ql2, ql3, NumUsers, H_num,
                              gen_prob, threshold, dist_fac, iters, figname)
@@ -377,8 +312,8 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
             rate_input[1, x] = np.sum(rate_track_2[:, x], axis=0)
             rate_input[2, x] = np.sum(rate_track_3[:, x], axis=0)
         p_whole = int(100 * gen_prob)
-        figname = '../Figures/PairRequest/RateTotals_LR_{}_{}_{}_{}_{}'.format(
-                NumUsers, H_num, p_whole, pDist, sched_type)
+        figname = '../Figures/PairRequest/RateTotals_LR_{}_{}_{}_{}'.format(
+                NumUsers, H_num, p_whole, sched_type)
 
         plot_total_rates(rate_input, NumUsers, H_num, gen_prob, threshold,
                          dist_fac, iters, figname)
@@ -417,3 +352,27 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
 
 # study_balance_near_threshold(4, 2, 'uBin', 0.75,
 #                              'base', 1, 10000, 0.05)
+
+NumUsers = 4
+H_num = 2
+NQs = int(bc(NumUsers, 2))
+p_gen = 0.75
+lSwitch = p_gen * H_num
+global_scale = 10
+# Should relate to timescale of system
+# One node can be involved in N-1 sessions
+# per session a mx of p_gen ent generated per slot
+# maybe one user can deal with a max of ((NQs - 1) / 2) * p_gen pair generated
+# per slot, as example where user cutoffs are actually relevant
+# user_max_rates = [(NQs / 2) * p_gen] * NumUsers
+# try user_max_rates set to NQs for case when they are not relevant
+user_max_rates = [NQs] * NQs
+userSessions = partition_sessions_by_user(NumUsers, NQs)
+current_queue_lengths = np.array([1, 1, 1, 0, 1, 1])
+price_vector = update_prices(NumUsers, userSessions,
+                             lSwitch, user_max_rates,
+                             current_queue_lengths)
+min_rates = [p_gen / global_scale] * NQs
+max_rates = [p_gen] * NQs
+rates = update_rates(NumUsers, NQs, price_vector, min_rates, max_rates)
+print(rates, '\n\n', sum(rates))

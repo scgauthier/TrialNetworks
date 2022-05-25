@@ -56,25 +56,20 @@ def prep_dist(NumUsers: int, H_num: int,
 # Specify max # of submissions per VOQ per round
 # Probability of each request submission
 # for queue i is p_i.
-# pDist options: 'uBin' = uniform binomial
-#                'rBin' = random splitt of threshold amongst binomial NQs
 def gen_arrivals(NumUsers: int,
-                 pDist: str,
                  probs: list) -> np.ndarray:
 
     NQs = int(bc(NumUsers, 2))
     arrivals = np.zeros(NQs)
 
-    if ((pDist == 'uBin') or (pDist == 'rBin')):
-
-        for x in range(NQs):
-            if probs[x] < 1:
-                arrivals[x] = binom.rvs(1, probs[x], size=1)[0]
-            else:  # deal with rates > 1
-                int_part = floor(probs[x])
-                prob = probs[x] - floor(probs[x])
-                arrivals[x] = (int_part
-                               + binom.rvs(1, prob, size=1)[0])
+    for x in range(NQs):
+        if probs[x] < 1:
+            arrivals[x] = binom.rvs(1, probs[x], size=1)[0]
+        else:  # deal with rates > 1
+            int_part = floor(probs[x])
+            prob = probs[x] - floor(probs[x])
+            arrivals[x] = (int_part
+                           + binom.rvs(1, prob, size=1)[0])
 
     return arrivals
 
@@ -87,7 +82,6 @@ def gen_arrivals(NumUsers: int,
 def flexible_schedule(H_num: int,
                       NQs: int,
                       current_queue_lengths: np.ndarray,
-                      marked: np.ndarray,
                       max_sched_per_q: int) -> np.ndarray:
 
     QLs = np.copy(current_queue_lengths)
@@ -97,7 +91,7 @@ def flexible_schedule(H_num: int,
     paired_up = []
     for x in range(NQs):
         paired_up.append((QLs[x], x))
-    random.shuffle(paired_up)
+    shuffle(paired_up)
     for x in range(NQs):
         QLs[x] = paired_up[x][0]
 
@@ -120,7 +114,6 @@ def flexible_schedule(H_num: int,
 def weighted_flex_schedule(H_num: int, NQs: int,
                            probs: list,
                            current_queue_lengths: np.ndarray,
-                           marked: np.ndarray,
                            service_times: np.ndarray,
                            time: int,
                            max_sched_per_q: int) -> np.ndarray:
@@ -140,7 +133,7 @@ def weighted_flex_schedule(H_num: int, NQs: int,
     paired_up = []
     for x in range(NQs):
         paired_up.append((QLs[x], x))
-    random.shuffle(paired_up)
+    shuffle(paired_up)
     for x in range(NQs):
         QLs[x] = paired_up[x][0]
 
@@ -168,9 +161,8 @@ def model_probabilistic_link_gen(NumUsers: int, gen_prob: float,
             for y in range(int(schedule[x])):  # accomodate flexible scheduling
                 if random() > gen_prob:
                     new_schedule[x] -= 1
-    marked = schedule - new_schedule  # marks failed generations
 
-    return new_schedule, marked
+    return new_schedule
 
 
 ############################################################
@@ -196,7 +188,6 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
     avrg_rates = np.zeros(NQs)
     service_times = np.zeros(NQs)
     schedule = np.zeros(NQs)
-    marked = np.zeros(NQs)
 
     probs = prep_dist(NumUsers, H_num, prob_param, pDist, max_sched_per_q)
     ratemax, ratemin = probs.index(max(probs)), probs.index(min(probs))
@@ -204,15 +195,15 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
 
     for x in range(iters):
         # Get submitted requests
-        arrivals = gen_arrivals(NumUsers, pDist, probs)
+        arrivals = gen_arrivals(NumUsers, probs)
         # Update submission times
         for y in np.nonzero(arrivals):
             submission_times[y, x] = arrivals[y]
 
         # for current schedule, do link gen
-        schedule, marked = model_probabilistic_link_gen(NumUsers,
-                                                        gen_prob,
-                                                        schedule)
+        schedule = model_probabilistic_link_gen(NumUsers,
+                                                gen_prob,
+                                                schedule)
 
         # Update service times:
         for y in np.nonzero(schedule)[0]:
@@ -254,13 +245,11 @@ def simulate_queue_lengths(NumUsers: int, H_num: int,
         if sched_type == 'base':
             schedule = flexible_schedule(H_num, NQs,
                                          queue_lengths[:, x],
-                                         marked,
                                          max_sched_per_q)
         elif sched_type == 'weighted':
             schedule = weighted_flex_schedule(H_num, NQs,
                                               probs,
                                               queue_lengths[:, x],
-                                              marked,
                                               service_times,
                                               x,
                                               max_sched_per_q)
@@ -512,4 +501,4 @@ def study_near_threshold(NumUsers: int, H_num: int,
     #       '\n\n', wt3, 1/rt3, rt3, sum(rt3))
 
 
-study_near_threshold(4, 2, 'uBin', 0.75, 'base', 1, 10000, 0.1)
+# study_near_threshold(4, 2, 'uBin', 0.75, 'base', 2, 10000, 0.05)
