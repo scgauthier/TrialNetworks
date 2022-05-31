@@ -77,25 +77,31 @@ def partition_sessions_by_user(NumUsers: int, NQs: int) -> np.ndarray:
 
 def update_prices(NumUsers: int, userSessions: np.ndarray,
                   lambda_Switch: float, user_max_rates: list,
-                  lastT_queue_lengths: np.ndarray) -> list[int]:
+                  lastT_queue_lengths: np.ndarray,
+                  lastT_rates: np.ndarray) -> list[int]:
 
+    sum_session_rates = np.sum(lastT_rates)
+    sum_ql = np.sum(lastT_queue_lengths)
     price_vector = []
     # centralized price is total queue length at each time step
     # probably needs to be replaced as estimation of queue length at t + 1
     # based on q(t) sum of rates, and service rate
-    price_vector.append(np.sum(lastT_queue_lengths) / lambda_Switch)
+    # central_p = (1 / lambda_Switch) * (sum_ql + sum_session_rates
+    #                                    - lambda_Switch)
+    central_p = (sum_ql + sum_session_rates - lambda_Switch)
+    price_vector.append(max(central_p, 0))
 
     for u in range(NumUsers):
         p_u = 0
         for session in userSessions[u]:
             # each user price is sum over queue lengths from their sessions
             # probably needs to be replaced also
-            p_u += lastT_queue_lengths[int(session - 1)]
+            p_u += (lastT_queue_lengths[int(session - 1)]
+                    + lastT_rates[int(session - 1)])
+        p_u -= user_max_rates[u]
         # Scaling of price, currently by 1/lambda*_u
-        print(p_u, 'before')
-        p_u = p_u / user_max_rates[u]
-        print(p_u, 'after \n\n')
-        price_vector.append(p_u)
+        # p_u = p_u / user_max_rates[u]
+        price_vector.append(max(p_u, 0))
 
     return price_vector
 
@@ -129,12 +135,12 @@ def update_rates(NumUsers: int, NQs: int,
     return rates
 
 
+# should set up to also track rate recieved
 def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
                            threshold: float,
                            user_max_rates: list,
                            session_min_rates: list,
                            gen_prob: float,
-                           sched_type: str,
                            max_sched_per_q: int,
                            iters: int) -> Tuple[np.ndarray, np.ndarray,
                                                 np.ndarray, list, list,
@@ -143,6 +149,7 @@ def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
     NQs = int(bc(NumUsers, 2))
     queue_lengths = np.zeros((NQs, iters))
     rate_track = np.zeros((NQs, iters))
+    delivered = np.zeros((NQs, iters))
     schedule = np.zeros(NQs)
 
     # record user sessions
@@ -166,7 +173,8 @@ def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
             # based on prices, sources update rates
             price_vector = update_prices(NumUsers, userSessions,
                                          threshold, user_max_rates,
-                                         queue_lengths[:, x - 1])
+                                         queue_lengths[:, x - 1],
+                                         rate_track[:, x - 1])
             rates = update_rates(NumUsers, NQs, price_vector,
                                  session_min_rates, session_max_rates)
 
@@ -177,6 +185,9 @@ def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
                                                     gen_prob,
                                                     schedule)
 
+            # track delivery of entangled pairs to sessions
+            delivered[:, x] = schedule
+
             # Update queue lengths at x based on lengths at x-1, schedule
             # from x-1,
             # successful link gen at x, and arrivals at x
@@ -186,22 +197,11 @@ def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
         else:
             queue_lengths[:, x] = arrivals[:]
 
-        if sched_type == 'base':
-            schedule = flexible_schedule(H_num, NQs,
-                                         queue_lengths[:, x],
-                                         max_sched_per_q)
-        # if want to use a weighted form of scheduling, need to specify how
-        # elif sched_type == 'weighted':
-        #     schedule = weighted_flex_schedule(H_num, NQs,
-        #                                       rates,
-        #                                       queue_lengths[:, x],
-        #                                       x,
-        #                                       max_sched_per_q)
-        else:
-            print('Invalid scheduling type specified')
-            return
+        schedule = flexible_schedule(H_num, NQs,
+                                     queue_lengths[:, x],
+                                     max_sched_per_q)
 
-    return (queue_lengths, rate_track)
+    return (queue_lengths, rate_track, delivered)
 
 
 def plot_total_rates(rates: np.ndarray, NumUsers: int, H_num: int,
@@ -214,12 +214,21 @@ def plot_total_rates(rates: np.ndarray, NumUsers: int, H_num: int,
     fig.suptitle('N = {}, H = {}, p = {}, T = {}'.format(
                  NumUsers, H_num, gen_prob, threshold),
                  fontsize=28)
+    av1 = (sum(rates[0, :]) / iters)
     ax1.plot(range(iters), rates[0, :], color=cmap(0),
              label='T - {}'.format(dist_fac * threshold))
+    ax1.plot(range(iters), [av1] * iters, '--',
+             color=cmap(inds[2]), label='{}'.format(round(av1, 3)))
+    av2 = (sum(rates[1, :]) / iters)
     ax2.plot(range(iters), rates[1, :], color=cmap(inds[1]),
              label='T')
+    ax2.plot(range(iters), [av2] * iters, '--',
+             color=cmap(0), label='{}'.format(round(av2, 3)))
+    av3 = sum(rates[2, :]) / iters
     ax3.plot(range(iters), rates[2, :], color=cmap(inds[2]),
              label='T + {}'.format(dist_fac * threshold))
+    ax3.plot(range(iters), [av3] * iters, '--',
+             color=cmap(0), label='{}'.format(round(av3, 3)))
 
     ax3.legend(fontsize=22, framealpha=0.6, loc=2)
 
@@ -234,8 +243,7 @@ def plot_total_rates(rates: np.ndarray, NumUsers: int, H_num: int,
 
 def plot_rate_profile(all_rates: List[np.ndarray], NumUsers: int,
                       H_num: int, gen_prob: float, threshold: float,
-                      dist_fac: float, sched_type: str,
-                      iters: int) -> None:
+                      dist_fac: float, iters: int) -> None:
 
     cmap = plt.cm.get_cmap('plasma')
     NQs = int(bc(NumUsers, 2))
@@ -252,127 +260,178 @@ def plot_rate_profile(all_rates: List[np.ndarray], NumUsers: int,
             plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
             plt.title(numlabs[x])
 
-            figname = '../Figures/PairRequest/RateProfile_{}_{}_{}_{}'.format(
-                      NumUsers, H_num, sched_type, wordlabs[x])
+            figname = '../Figures/AlgAdjust/RateProfile_{}_{}_{}'.format(
+                      NumUsers, H_num, wordlabs[x])
             plt.savefig(figname, dpi=300, bbox_inches='tight')
 
 
+def plot_delivery_rates(moving_avrgs: np.ndarray, avrg_delivered: list,
+                        figname: str, iters: int, ptsInAvrg: int) -> None:
+
+    cmap = plt.cm.get_cmap('plasma')
+    inds = np.linspace(0, 0.85, 3)
+    fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, figsize=(10, 8))
+
+    ax1.plot(range(iters), moving_avrgs[0], color=cmap(0),
+             label='{} pt Avrg'.format(ptsInAvrg))
+    ax1.plot(range(iters), [avrg_delivered[0]] * iters, '--',
+             color=cmap(inds[2]),
+             label='Avrg={}'.format(round(avrg_delivered[0], 3)))
+    ax2.plot(range(iters), moving_avrgs[1], color=cmap(inds[1]),
+             label='{} pt Avrg'.format(ptsInAvrg))
+    ax2.plot(range(iters), [avrg_delivered[1]] * iters, '--',
+             color=cmap(0),
+             label='Avrg={}'.format(round(avrg_delivered[1], 3)))
+    ax3.plot(range(iters), moving_avrgs[2], color=cmap(inds[2]),
+             label='{} pt Avrg'.format(ptsInAvrg))
+    ax3.plot(range(iters), [avrg_delivered[2]] * iters, '--',
+             color=cmap(0),
+             label='Avrg={}'.format(round(avrg_delivered[2], 3)))
+
+    ax3.legend(fontsize=22, framealpha=0.4, loc=1)
+
+    ax2.legend(fontsize=22, framealpha=0.4, loc=1)
+
+    ax1.legend(fontsize=22, framealpha=0.4, loc=1)
+
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
+
+    plt.savefig(figname, dpi=300, bbox_inches='tight')
+
+    return
+
+
 def study_balance_near_threshold(NumUsers: int, H_num: int,
+                                 user_max_rates: list,
+                                 session_min_rates: list,
                                  gen_prob: float,
-                                 sched_type: str, max_sched_per_q: int,
-                                 iters: int,
-                                 dist_fac: float) -> None:
+                                 max_sched_per_q: int,
+                                 iters: int, dist_fac: float) -> None:
 
     threshold = ((H_num * gen_prob)
                  // (1/10000)) / 10000  # Truncate at 4th place
 
-    (q1, wt1, rt1, rr1,
-     waitMax1, waitMin1,
-     rate_track_1) = sim_QL_w_rate_feedback(NumUsers, H_num,
+    (q1, rts1, d1) = sim_QL_w_rate_feedback(NumUsers, H_num,
                                             (1 - dist_fac) * (threshold),
+                                            user_max_rates,
+                                            session_min_rates,
                                             gen_prob,
-                                            sched_type,
                                             max_sched_per_q, iters)
-    (q2, wt2, rt2, rr2,
-     waitMax2, waitMin2,
-     rate_track_2) = sim_QL_w_rate_feedback(NumUsers, H_num,
-                                            threshold, gen_prob,
-                                            sched_type,
+    (q2, rts2, d2) = sim_QL_w_rate_feedback(NumUsers, H_num,
+                                            threshold,
+                                            user_max_rates,
+                                            session_min_rates, gen_prob,
                                             max_sched_per_q, iters)
-    (q3, wt3, rt3, rr3,
-     waitMax3, waitMin3,
-     rate_track_3) = sim_QL_w_rate_feedback(NumUsers, H_num,
+    (q3, rts3, d3) = sim_QL_w_rate_feedback(NumUsers, H_num,
                                             (1 + dist_fac) * threshold,
+                                            user_max_rates,
+                                            session_min_rates,
                                             gen_prob,
-                                            sched_type,
                                             max_sched_per_q, iters)
 
+    Nexcl = 1000
     pltQStab = True
     if pltQStab:
 
-        ql1, ql2, ql3 = np.zeros(iters), np.zeros(iters), np.zeros(iters)
-        for x in range(iters):
+        ql1, ql2, ql3 = np.zeros(iters - Nexcl), np.zeros(iters - Nexcl), \
+                        np.zeros(iters - Nexcl)
+        for x in range(Nexcl, iters):
             # Store total queue lengths
-            ql1[x] = np.sum(q1[:, x], axis=0)
-            ql2[x] = np.sum(q2[:, x], axis=0)
-            ql3[x] = np.sum(q3[:, x], axis=0)
+            ql1[x - Nexcl] = np.sum(q1[:, x], axis=0)
+            ql2[x - Nexcl] = np.sum(q2[:, x], axis=0)
+            ql3[x - Nexcl] = np.sum(q3[:, x], axis=0)
 
-        p_whole = int(100 * gen_prob)
-        figname = '../Figures/PairRequest/QStab_LR_{}_{}_{}_{}'.format(
-                NumUsers, H_num, p_whole, sched_type)
+        p_whole = int(1000 * gen_prob)
+        figname = '../Figures/AlgAdjust/QStab_LR_{}_{}_{}'.format(
+                NumUsers, H_num, p_whole)
 
         plot_queue_stability(ql1, ql2, ql3, NumUsers, H_num,
-                             gen_prob, threshold, dist_fac, iters, figname)
+                             gen_prob, threshold, dist_fac, (iters - Nexcl),
+                             figname)
 
     pltTotRts = True
     if pltTotRts:
-        rate_input = np.zeros((3, iters))
-        for x in range(iters):
-            rate_input[0, x] = np.sum(rate_track_1[:, x], axis=0)
-            rate_input[1, x] = np.sum(rate_track_2[:, x], axis=0)
-            rate_input[2, x] = np.sum(rate_track_3[:, x], axis=0)
+        sum_rates = np.zeros((3, (iters - Nexcl)))
+        for x in range(Nexcl, iters):
+            sum_rates[0, x - Nexcl] = np.sum(rts1[:, x], axis=0)
+            sum_rates[1, x - Nexcl] = np.sum(rts2[:, x], axis=0)
+            sum_rates[2, x - Nexcl] = np.sum(rts3[:, x], axis=0)
         p_whole = int(100 * gen_prob)
-        figname = '../Figures/PairRequest/RateTotals_LR_{}_{}_{}_{}'.format(
-                NumUsers, H_num, p_whole, sched_type)
+        figname = '../Figures/AlgAdjust/RateTotals_LR_{}_{}_{}'.format(
+                NumUsers, H_num, p_whole)
 
-        plot_total_rates(rate_input, NumUsers, H_num, gen_prob, threshold,
-                         dist_fac, iters, figname)
+        plot_total_rates(sum_rates, NumUsers, H_num, gen_prob, threshold,
+                         dist_fac, (iters - Nexcl), figname)
 
     pltRtProfile = True
     if pltRtProfile:
 
-        all_rates = [rate_track_1, rate_track_2, rate_track_3]
+        all_rates = [rts1[:, Nexcl:iters], rts2[:, Nexcl:iters],
+                     rts3[:, Nexcl:iters]]
 
         plot_rate_profile(all_rates, NumUsers, H_num, gen_prob, threshold,
-                          dist_fac, sched_type, iters)
-
-    pltWTD = False
-    if pltWTD:
-        figname = '../Figures/PairRequest/LR_WTD_{}_{}_{}_{}_{}'.format(
-                NumUsers, H_num, sched_type,
-                round(1/max(rr1)), round(1/min(rr1)))
-        plot_waiting_time_dists(waitMax1, waitMin1, rt1,
-                                NumUsers, H_num, figname)
+                          dist_fac, (iters - Nexcl))
 
     pltIdvQs = False
     if pltIdvQs:
 
-        wt = np.array([wt1, wt2, wt3])
-        rt = np.array([rt1, rt2, rt3])
-        rr = np.array([rr1, rr2, rr3])
+        plot_individual_queues(q1[:, Nexcl:iters], q2[:, Nexcl:iters],
+                               q3[:, Nexcl:iters], (iters - Nexcl), NumUsers,
+                               H_num, dist_fac, threshold)
 
-        plot_individual_queues(q1, q2, q3, iters, NumUsers,
-                               H_num,
-                               wt, rt, rr,
-                               dist_fac, threshold, sched_type)
+    # look at actually delivered rates (total)
+    # look at in two ways:
+    # 1. total average over course of simulation
+    # 2. Moving average of x number of points
+    pltDelivered = True
+    if pltDelivered:
 
-    # print(wt1, 1/rt1, rt1, sum(rt1), '\n\n', wt2, 1/rt2, rt2, sum(rt2),
-    #       '\n\n', wt3, 1/rt3, rt3, sum(rt3))
+        ptsInAvrg = 100
+        average_delivered = [(np.sum(d1) / iters),
+                             (np.sum(d2) / iters),
+                             (np.sum(d3) / iters)]
+
+        avrgs = np.zeros((3, (iters - ptsInAvrg)))
+        deliveries = [d1, d2, d3]
+        for dv in range(3):
+            for x in range(ptsInAvrg, iters):
+                sum = 0
+                for y in range(ptsInAvrg):
+                    sum += np.sum(deliveries[dv][:, x - y])
+                avrgs[dv, x - ptsInAvrg] = sum / ptsInAvrg
+        figname = '../Figures/AlgAdjust/DeliveryRates_LR_{}_{}_{}'.format(
+                NumUsers, H_num, p_whole)
+
+        plot_delivery_rates(avrgs, average_delivered,
+                            figname, (iters - ptsInAvrg), ptsInAvrg)
+
+    return
+
+#  Write simulation to optimize the stepsize w/o scaling
+#  want to record max fluctuations detected after first x steps have passed,
+#  for x = 10, 100, 1000; want average queue backlog (discard 1000 steps)
 
 
-# study_balance_near_threshold(4, 2, 'uBin', 0.75,
-#                              'base', 1, 10000, 0.05)
-
-NumUsers = 4
+NumUsers = 7
 H_num = 2
 NQs = int(bc(NumUsers, 2))
-p_gen = 0.75
-lSwitch = p_gen * H_num
-global_scale = 10
+max_sched_per_q = 1
+p_gen = 0.075
+global_scale = 100
+iters = 50000
+dist_fac = 0.05
 # Should relate to timescale of system
 # One node can be involved in N-1 sessions
 # per session a mx of p_gen ent generated per slot
 # maybe one user can deal with a max of ((NQs - 1) / 2) * p_gen pair generated
 # per slot, as example where user cutoffs are actually relevant
-# user_max_rates = [(NQs / 2) * p_gen] * NumUsers
+user_max_rates = [((NQs - 1) / 2) * p_gen] * NumUsers
+# user_max_rates = [H_num * p_gen] * NumUsers
 # try user_max_rates set to NQs for case when they are not relevant
-user_max_rates = [NQs] * NQs
+# user_max_rates = [NQs] * NQs
 userSessions = partition_sessions_by_user(NumUsers, NQs)
-current_queue_lengths = np.array([1, 1, 1, 0, 1, 1])
-price_vector = update_prices(NumUsers, userSessions,
-                             lSwitch, user_max_rates,
-                             current_queue_lengths)
-min_rates = [p_gen / global_scale] * NQs
-max_rates = [p_gen] * NQs
-rates = update_rates(NumUsers, NQs, price_vector, min_rates, max_rates)
-print(rates, '\n\n', sum(rates))
+session_min_rates = [p_gen / global_scale] * NQs
+
+study_balance_near_threshold(NumUsers, H_num, user_max_rates,
+                             session_min_rates, p_gen, max_sched_per_q,
+                             iters, dist_fac)
