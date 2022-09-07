@@ -374,10 +374,8 @@ def plot_individual_queues(q1: np.ndarray,
                            q3: np.ndarray,
                            iters: int,
                            NumUsers: int, H_num: int,
-                           wt: np.ndarray, rt: np.ndarray,
-                           rr: list, dist_fac: float,
-                           threshold: float,
-                           sched_type: str) -> None:
+                           dist_fac: float,
+                           threshold: float) -> None:
 
     NQs = int(bc(NumUsers, 2))
     cmap = plt.cm.get_cmap('plasma')
@@ -385,45 +383,36 @@ def plot_individual_queues(q1: np.ndarray,
 
     inds = np.linspace(0, 0.85, NQs)
     for x in range(NQs):
-        plt.plot(range(iters), q1[x, :], color=cmap(inds[x]),
-                 label='WT={}, Rate={}, RR={}'.format(round(wt[0, x], 1),
-                                                      round(rt[0, x], 3),
-                                                      round(rr[0, x], 3)))
+        plt.plot(range(iters), q1[x, :], color=cmap(inds[x]))
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
     plt.legend(fontsize=20, framealpha=0.6, loc=1)
     plt.title('T - {}'.format((((dist_fac * threshold) // (1/1000)) / 1000)),
               fontsize=28)
-    figname = '../Figures/PairRequest/IQs_LR_{}_{}_{}_BelowT'.format(
-            NumUsers, H_num, sched_type)
+    figname = '../Figures/AlgAdjust/IQs_LR_{}_{}_BelowT'.format(
+            NumUsers, H_num)
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
     plt.figure(figsize=(10, 8))
     inds = np.linspace(0, 0.85, NQs)
     for x in range(NQs):
-        plt.plot(range(iters), q2[x, :], color=cmap(inds[x]),
-                 label='WT={}, Rate={}, RR={}'.format(round(wt[1, x], 1),
-                                                      round(rt[1, x], 3),
-                                                      round(rr[1, x], 3)))
+        plt.plot(range(iters), q2[x, :], color=cmap(inds[x]))
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
     plt.legend(fontsize=20, framealpha=0.6, loc=1)
     plt.title('T', fontsize=28)
-    figname = '../Figures/PairRequest/IQs_LR_{}_{}_{}_AtT'.format(
-            NumUsers, H_num, sched_type)
+    figname = '../Figures/AlgAdjust/IQs_LR_{}_{}_AtT'.format(
+            NumUsers, H_num)
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
     plt.figure(figsize=(10, 8))
     inds = np.linspace(0, 0.85, NQs)
     for x in range(NQs):
-        plt.plot(range(iters), q3[x, :], color=cmap(inds[x]),
-                 label='WT={}, Rate={}, RR={}'.format(round(wt[2, x], 1),
-                                                      round(rt[2, x], 3),
-                                                      round(rr[2, x], 3)))
+        plt.plot(range(iters), q3[x, :], color=cmap(inds[x]))
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
     plt.legend(fontsize=20, framealpha=0.6, loc=2)
     plt.title('T + {}'.format((((dist_fac * threshold) // (1/1000)) / 1000)),
               fontsize=28)
-    figname = '../Figures/PairRequest/IQs_LR_{}_{}_{}_AboveT'.format(
-            NumUsers, H_num, sched_type)
+    figname = '../Figures/AlgAdjust/IQs_LR_{}_{}_AboveT'.format(
+            NumUsers, H_num)
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
 
