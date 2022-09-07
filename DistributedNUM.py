@@ -6,7 +6,7 @@ from typing import Tuple, List
 from ToySwitch import gen_arrivals, model_probabilistic_link_gen
 from ToySwitch import flexible_schedule
 from ToySwitch import plot_queue_stability, plot_individual_queues
-from ToySwitch import plot_waiting_time_dists
+# from ToySwitch import plot_waiting_time_dists
 
 from matplotlib import rc
 
@@ -77,6 +77,8 @@ def partition_sessions_by_user(NumUsers: int, NQs: int) -> np.ndarray:
 
 def update_prices(NumUsers: int, userSessions: np.ndarray,
                   lambda_Switch: float, user_max_rates: list,
+                  step_size: float,
+                  central_scale: float,
                   lastT_queue_lengths: np.ndarray,
                   lastT_rates: np.ndarray) -> list[int]:
 
@@ -86,9 +88,10 @@ def update_prices(NumUsers: int, userSessions: np.ndarray,
     # centralized price is total queue length at each time step
     # probably needs to be replaced as estimation of queue length at t + 1
     # based on q(t) sum of rates, and service rate
-    # central_p = (1 / lambda_Switch) * (sum_ql + sum_session_rates
-    #                                    - lambda_Switch)
-    central_p = (sum_ql + sum_session_rates - lambda_Switch)
+    central_p = central_scale * (sum_ql
+                                 + (step_size * (sum_session_rates
+                                    - lambda_Switch)))
+    # central_p = (sum_ql + sum_session_rates - lambda_Switch)
     price_vector.append(max(central_p, 0))
 
     for u in range(NumUsers):
@@ -100,7 +103,7 @@ def update_prices(NumUsers: int, userSessions: np.ndarray,
                     + lastT_rates[int(session - 1)])
         p_u -= user_max_rates[u]
         # Scaling of price, currently by 1/lambda*_u
-        # p_u = p_u / user_max_rates[u]
+        p_u = p_u / user_max_rates[u]
         price_vector.append(max(p_u, 0))
 
     return price_vector
@@ -140,6 +143,8 @@ def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
                            threshold: float,
                            user_max_rates: list,
                            session_min_rates: list,
+                           step_size: float,
+                           central_scale: float,
                            gen_prob: float,
                            max_sched_per_q: int,
                            iters: int) -> Tuple[np.ndarray, np.ndarray,
@@ -173,6 +178,8 @@ def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
             # based on prices, sources update rates
             price_vector = update_prices(NumUsers, userSessions,
                                          threshold, user_max_rates,
+                                         step_size,
+                                         central_scale,
                                          queue_lengths[:, x - 1],
                                          rate_track[:, x - 1])
             rates = update_rates(NumUsers, NQs, price_vector,
@@ -304,6 +311,8 @@ def plot_delivery_rates(moving_avrgs: np.ndarray, avrg_delivered: list,
 def study_balance_near_threshold(NumUsers: int, H_num: int,
                                  user_max_rates: list,
                                  session_min_rates: list,
+                                 step_size: float,
+                                 central_scale: float,
                                  gen_prob: float,
                                  max_sched_per_q: int,
                                  iters: int, dist_fac: float) -> None:
@@ -315,17 +324,24 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
                                             (1 - dist_fac) * (threshold),
                                             user_max_rates,
                                             session_min_rates,
+                                            step_size,
+                                            central_scale,
                                             gen_prob,
                                             max_sched_per_q, iters)
     (q2, rts2, d2) = sim_QL_w_rate_feedback(NumUsers, H_num,
                                             threshold,
                                             user_max_rates,
-                                            session_min_rates, gen_prob,
+                                            session_min_rates,
+                                            step_size,
+                                            central_scale,
+                                            gen_prob,
                                             max_sched_per_q, iters)
     (q3, rts3, d3) = sim_QL_w_rate_feedback(NumUsers, H_num,
                                             (1 + dist_fac) * threshold,
                                             user_max_rates,
                                             session_min_rates,
+                                            step_size,
+                                            central_scale,
                                             gen_prob,
                                             max_sched_per_q, iters)
 
@@ -356,7 +372,7 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
             sum_rates[0, x - Nexcl] = np.sum(rts1[:, x], axis=0)
             sum_rates[1, x - Nexcl] = np.sum(rts2[:, x], axis=0)
             sum_rates[2, x - Nexcl] = np.sum(rts3[:, x], axis=0)
-        p_whole = int(100 * gen_prob)
+        p_whole = int(1000 * gen_prob)
         figname = '../Figures/AlgAdjust/RateTotals_LR_{}_{}_{}'.format(
                 NumUsers, H_num, p_whole)
 
@@ -399,6 +415,7 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
                 for y in range(ptsInAvrg):
                     sum += np.sum(deliveries[dv][:, x - y])
                 avrgs[dv, x - ptsInAvrg] = sum / ptsInAvrg
+        p_whole = int(1000 * gen_prob)
         figname = '../Figures/AlgAdjust/DeliveryRates_LR_{}_{}_{}'.format(
                 NumUsers, H_num, p_whole)
 
@@ -407,31 +424,39 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
 
     return
 
-#  Write simulation to optimize the stepsize w/o scaling
-#  want to record max fluctuations detected after first x steps have passed,
-#  for x = 10, 100, 1000; want average queue backlog (discard 1000 steps)
+
+def study_algorithm(NumUsers: int, H_num: int,
+                    user_max_rates: list,
+                    session_min_rates: list,
+                    step_size: float,
+                    central_scale: float,
+                    gen_prob: float,
+                    max_sched_per_q: int,
+                    iters: int, dist_fac: float) -> None:
+    return
 
 
-NumUsers = 7
-H_num = 2
-NQs = int(bc(NumUsers, 2))
+NumUsers = 15
+H_num = 3
 max_sched_per_q = 1
-p_gen = 0.075
-global_scale = 100
-iters = 50000
-dist_fac = 0.05
+# NQs = int(bc(NumUsers, 2))
+# p_gen = 0.05
+# global_scale = 1000
+# iters = 10000
+# dist_fac = 0.05
+# step_size = 1
 # Should relate to timescale of system
 # One node can be involved in N-1 sessions
 # per session a mx of p_gen ent generated per slot
 # maybe one user can deal with a max of ((NQs - 1) / 2) * p_gen pair generated
 # per slot, as example where user cutoffs are actually relevant
-user_max_rates = [((NQs - 1) / 2) * p_gen] * NumUsers
+# user_max_rates = [((NQs - 1) / 2) * p_gen] * NumUsers
 # user_max_rates = [H_num * p_gen] * NumUsers
 # try user_max_rates set to NQs for case when they are not relevant
 # user_max_rates = [NQs] * NQs
-userSessions = partition_sessions_by_user(NumUsers, NQs)
-session_min_rates = [p_gen / global_scale] * NQs
+# session_min_rates = [p_gen / global_scale] * NQs
 
-study_balance_near_threshold(NumUsers, H_num, user_max_rates,
-                             session_min_rates, p_gen, max_sched_per_q,
-                             iters, dist_fac)
+# study_balance_near_threshold(NumUsers, H_num, user_max_rates,
+#                              session_min_rates, step_size,
+#                              p_gen, max_sched_per_q,
+#                              iters, dist_fac)
