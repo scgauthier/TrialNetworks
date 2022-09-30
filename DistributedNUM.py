@@ -1,11 +1,13 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.special import binom as bc
-from typing import Tuple, List
+from typing import Tuple
 
 from ToySwitch import gen_arrivals, model_probabilistic_link_gen
 from ToySwitch import flexible_schedule
 from ToySwitch import plot_queue_stability, plot_individual_queues
+
+from PlottingFcns import plot_total_rates, plot_rate_profile
+from PlottingFcns import plot_delivery_rates
 # from ToySwitch import plot_waiting_time_dists
 
 from matplotlib import rc
@@ -211,103 +213,6 @@ def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
     return (queue_lengths, rate_track, delivered)
 
 
-def plot_total_rates(rates: np.ndarray, NumUsers: int, H_num: int,
-                     gen_prob: float, threshold: float, dist_fac: float,
-                     iters: int, figname: str) -> None:
-
-    cmap = plt.cm.get_cmap('plasma')
-    inds = np.linspace(0, 0.85, 3)
-    fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, figsize=(10, 8))
-    fig.suptitle('N = {}, H = {}, p = {}, T = {}'.format(
-                 NumUsers, H_num, gen_prob, threshold),
-                 fontsize=28)
-    av1 = (sum(rates[0, :]) / iters)
-    ax1.plot(range(iters), rates[0, :], color=cmap(0),
-             label='T - {}'.format(dist_fac * threshold))
-    ax1.plot(range(iters), [av1] * iters, '--',
-             color=cmap(inds[2]), label='{}'.format(round(av1, 3)))
-    av2 = (sum(rates[1, :]) / iters)
-    ax2.plot(range(iters), rates[1, :], color=cmap(inds[1]),
-             label='T')
-    ax2.plot(range(iters), [av2] * iters, '--',
-             color=cmap(0), label='{}'.format(round(av2, 3)))
-    av3 = sum(rates[2, :]) / iters
-    ax3.plot(range(iters), rates[2, :], color=cmap(inds[2]),
-             label='T + {}'.format(dist_fac * threshold))
-    ax3.plot(range(iters), [av3] * iters, '--',
-             color=cmap(0), label='{}'.format(round(av3, 3)))
-
-    ax3.legend(fontsize=22, framealpha=0.6, loc=2)
-
-    ax2.legend(fontsize=22, framealpha=0.6, loc=2)
-
-    ax1.legend(fontsize=22, framealpha=0.6, loc=2)
-
-    plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
-
-    plt.savefig(figname, dpi=300, bbox_inches='tight')
-
-
-def plot_rate_profile(all_rates: List[np.ndarray], NumUsers: int,
-                      H_num: int, gen_prob: float, threshold: float,
-                      dist_fac: float, iters: int) -> None:
-
-    cmap = plt.cm.get_cmap('plasma')
-    NQs = int(bc(NumUsers, 2))
-    inds = np.linspace(0, 0.95, NQs)
-    numlabs = ['T - {}'.format((((dist_fac * threshold) // (1/1000)) / 1000)),
-               'T',
-               'T + {}'.format((((dist_fac * threshold) // (1/1000)) / 1000))]
-    wordlabs = ['BelowT', 'AtT', 'AboveT']
-
-    for x in range(3):
-        plt.figure(figsize=(10, 8))
-        for y in range(NQs):
-            plt.plot(range(iters), all_rates[x][y, :], color=cmap(inds[y]))
-            plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
-            plt.title(numlabs[x])
-
-            figname = '../Figures/AlgAdjust/RateProfile_{}_{}_{}'.format(
-                      NumUsers, H_num, wordlabs[x])
-            plt.savefig(figname, dpi=300, bbox_inches='tight')
-
-
-def plot_delivery_rates(moving_avrgs: np.ndarray, avrg_delivered: list,
-                        figname: str, iters: int, ptsInAvrg: int) -> None:
-
-    cmap = plt.cm.get_cmap('plasma')
-    inds = np.linspace(0, 0.85, 3)
-    fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, figsize=(10, 8))
-
-    ax1.plot(range(iters), moving_avrgs[0], color=cmap(0),
-             label='{} pt Avrg'.format(ptsInAvrg))
-    ax1.plot(range(iters), [avrg_delivered[0]] * iters, '--',
-             color=cmap(inds[2]),
-             label='Avrg={}'.format(round(avrg_delivered[0], 3)))
-    ax2.plot(range(iters), moving_avrgs[1], color=cmap(inds[1]),
-             label='{} pt Avrg'.format(ptsInAvrg))
-    ax2.plot(range(iters), [avrg_delivered[1]] * iters, '--',
-             color=cmap(0),
-             label='Avrg={}'.format(round(avrg_delivered[1], 3)))
-    ax3.plot(range(iters), moving_avrgs[2], color=cmap(inds[2]),
-             label='{} pt Avrg'.format(ptsInAvrg))
-    ax3.plot(range(iters), [avrg_delivered[2]] * iters, '--',
-             color=cmap(0),
-             label='Avrg={}'.format(round(avrg_delivered[2], 3)))
-
-    ax3.legend(fontsize=22, framealpha=0.4, loc=1)
-
-    ax2.legend(fontsize=22, framealpha=0.4, loc=1)
-
-    ax1.legend(fontsize=22, framealpha=0.4, loc=1)
-
-    plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
-
-    plt.savefig(figname, dpi=300, bbox_inches='tight')
-
-    return
-
-
 def study_balance_near_threshold(NumUsers: int, H_num: int,
                                  user_max_rates: list,
                                  session_min_rates: list,
@@ -377,7 +282,7 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
                 NumUsers, H_num, p_whole)
 
         plot_total_rates(sum_rates, NumUsers, H_num, gen_prob, threshold,
-                         dist_fac, (iters - Nexcl), figname)
+                         dist_fac, (iters - Nexcl), figname, True)
 
     pltRtProfile = True
     if pltRtProfile:
@@ -420,11 +325,12 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
                 NumUsers, H_num, p_whole)
 
         plot_delivery_rates(avrgs, average_delivered,
-                            figname, (iters - ptsInAvrg), ptsInAvrg)
+                            figname, (iters - ptsInAvrg), ptsInAvrg, True)
 
     return
 
 
+# use distance fac for plotting guidelines?
 def study_algorithm(NumUsers: int, H_num: int,
                     user_max_rates: list,
                     session_min_rates: list,
@@ -432,31 +338,80 @@ def study_algorithm(NumUsers: int, H_num: int,
                     central_scale: float,
                     gen_prob: float,
                     max_sched_per_q: int,
-                    iters: int, dist_fac: float) -> None:
+                    iters: int, runs: int,
+                    dist_fac: float) -> None:
+
+    threshold = ((H_num * gen_prob)
+                 // (1/10000)) / 10000  # Truncate at 4th place
+    # Nexcl = 1000
+    Nexcl = 0
+    average_requests = np.zeros(iters)
+
+    for run in range(runs):
+        if (run % 10) == 0:
+            print(run)
+        (queues,
+         requested_rates,
+         delivered_rates) = sim_QL_w_rate_feedback(NumUsers, H_num,
+                                                   threshold,
+                                                   user_max_rates,
+                                                   session_min_rates,
+                                                   step_size,
+                                                   central_scale,
+                                                   gen_prob,
+                                                   max_sched_per_q, iters)
+        sum_rates = np.zeros(iters)
+        for x in range(Nexcl, iters):
+            sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
+        average_requests += sum_rates
+
+    average_requests *= (1 / runs)
+
+    p_whole = int(1000 * gen_prob)
+    figname = '../Figures/AlgAdjust/AvRequestRates_{}_{}_{}_{}_{}'.format(
+            NumUsers, H_num, p_whole, runs, int(100 * dist_fac))
+
+    pltTotRts = True
+    if pltTotRts:
+        plot_total_rates(average_requests, NumUsers, H_num,
+                         gen_prob, threshold, dist_fac,
+                         iters, figname, False)
+
+    pltRtProfile = True
+    tag = 'UniformFixed'
+    if pltRtProfile:
+        plot_rate_profile(requested_rates[:, Nexcl:], NumUsers, H_num,
+                          gen_prob, threshold,
+                          dist_fac, (iters - Nexcl), False, tag)
     return
 
 
-NumUsers = 15
-H_num = 3
+NumUsers = 4
+H_num = 2
 max_sched_per_q = 1
-# NQs = int(bc(NumUsers, 2))
-# p_gen = 0.05
-# global_scale = 1000
-# iters = 10000
-# dist_fac = 0.05
+NQs = int(bc(NumUsers, 2))
+p_gen = 0.05
+global_scale = 1000
+iters = 10001
+runs = 1000
+dist_fac = 0.01
 # step_size = 1
+lambda_Switch = H_num * p_gen
 # Should relate to timescale of system
 # One node can be involved in N-1 sessions
 # per session a mx of p_gen ent generated per slot
 # maybe one user can deal with a max of ((NQs - 1) / 2) * p_gen pair generated
 # per slot, as example where user cutoffs are actually relevant
 # user_max_rates = [((NQs - 1) / 2) * p_gen] * NumUsers
-# user_max_rates = [H_num * p_gen] * NumUsers
+user_max_rates = [H_num * p_gen] * NumUsers
 # try user_max_rates set to NQs for case when they are not relevant
 # user_max_rates = [NQs] * NQs
-# session_min_rates = [p_gen / global_scale] * NQs
+session_min_rates = [p_gen / global_scale] * NQs
 
 # study_balance_near_threshold(NumUsers, H_num, user_max_rates,
 #                              session_min_rates, step_size,
 #                              p_gen, max_sched_per_q,
 #                              iters, dist_fac)
+study_algorithm(NumUsers, H_num, user_max_rates, session_min_rates,
+                1, 1/lambda_Switch, p_gen, max_sched_per_q,
+                iters, runs, dist_fac)
