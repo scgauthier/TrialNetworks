@@ -141,17 +141,17 @@ def update_rates(NumUsers: int, NQs: int,
 
 
 # should set up to also track rate recieved
-def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
-                           threshold: float,
-                           user_max_rates: list,
-                           session_min_rates: list,
-                           step_size: float,
-                           central_scale: float,
+def sim_QL_w_rate_feedback(NumUsers: int,
+                           params: Tuple,
                            gen_prob: float,
                            max_sched_per_q: int,
                            iters: int) -> Tuple[np.ndarray, np.ndarray,
                                                 np.ndarray, list, list,
                                                 list]:
+
+    # unpack param tuple
+    H_num, threshold, user_max_rates, session_min_rates = params[:4]
+    step_size, central_scale = params[4:]
 
     NQs = int(bc(NumUsers, 2))
     queue_lengths = np.zeros((NQs, iters))
@@ -173,6 +173,12 @@ def sim_QL_w_rate_feedback(NumUsers: int, H_num: int,
     rate_track[:, 0] = rates
 
     for x in range(iters):
+
+        # unpack param tuple
+        # repeating to allow changes between iters
+        H_num, threshold, user_max_rates, session_min_rates = params[:4]
+        step_size, central_scale = params[4:]
+
         # Get submitted requests
         arrivals = gen_arrivals(NumUsers, rates)
 
@@ -348,17 +354,13 @@ def study_algorithm(NumUsers: int, H_num: int,
     average_requests = np.zeros(iters)
 
     for run in range(runs):
+        params = [H_num, threshold, user_max_rates, session_min_rates,
+                  step_size, central_scale]
         if (run % 10) == 0:
             print(run)
         (queues,
          requested_rates,
-         delivered_rates) = sim_QL_w_rate_feedback(NumUsers, H_num,
-                                                   threshold,
-                                                   user_max_rates,
-                                                   session_min_rates,
-                                                   step_size,
-                                                   central_scale,
-                                                   gen_prob,
+         delivered_rates) = sim_QL_w_rate_feedback(NumUsers, params, gen_prob,
                                                    max_sched_per_q, iters)
         sum_rates = np.zeros(iters)
         for x in range(Nexcl, iters):
