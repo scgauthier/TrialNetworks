@@ -141,25 +141,21 @@ def update_rates(NumUsers: int, NQs: int,
     return rates
 
 
-def vary_H(params: Tuple, max_H: int, min_H: int,
-           index: int, indices: list) -> Tuple:
+def vary_H(params: Tuple, max_H: int, min_H: int) -> Tuple:
 
-    if index in indices:
-        H_num = params[0]
-        compar = random()
-        if (compar > 0.5) and ((H_num + 1) < max_H):
-            params[0] = H_num + 1
-        elif (compar <= 0.5) and ((H_num - 1) > min_H):
-            params[0] = H_num - 1
+    H_num = params[0]
+    compar = random()
+    if (compar > 0.5) and ((H_num + 1) <= max_H):
+        params[0] = H_num + 1
+    elif (compar <= 0.5) and ((H_num - 1) >= min_H):
+        params[0] = H_num - 1
 
     return params
-
 
 
 # should set up to also track rate recieved
 def sim_QL_w_rate_feedback(NumUsers: int,
                            params: Tuple,
-                           gen_prob: float,
                            max_sched_per_q: int,
                            iters: int,
                            param_change: bool) -> Tuple[np.ndarray, np.ndarray,
@@ -167,8 +163,11 @@ def sim_QL_w_rate_feedback(NumUsers: int,
                                                         list, list]:
 
     # unpack param tuple
-    H_num, threshold, user_max_rates, session_min_rates = params[:4]
+    H_num, gen_prob, user_max_rates, session_min_rates = params[:4]
     step_size, central_scale = params[4:]
+
+    max_H = H_num + 1
+    min_H = H_num - 1
 
     NQs = int(bc(NumUsers, 2))
     queue_lengths = np.zeros((NQs, iters))
@@ -199,11 +198,15 @@ def sim_QL_w_rate_feedback(NumUsers: int,
             if param_change:
                 change_key = params[6]
 
-                if change_key == 'ChangeH'
+                if (change_key == 'ChangeH') and (x in params[7]):
+                    vary_H(params, max_H, min_H)
                 # unpack param tuple
                 # repeating to allow changes between iters
-                H_num, threshold, user_max_rates, session_min_rates = params[:4]
+                H_num, gen_prob, user_max_rates, session_min_rates = params[:4]
                 step_size, central_scale = params[4:]
+
+                threshold = ((H_num * gen_prob)
+                             // (1/10000)) / 10000  # Truncate at 4th place
 
             # based on prices, sources update rates
             price_vector = update_prices(NumUsers, userSessions,
@@ -253,13 +256,10 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
     threshold = ((H_num * gen_prob)
                  // (1/10000)) / 10000  # Truncate at 4th place
 
-    (q1, rts1, d1) = sim_QL_w_rate_feedback(NumUsers, H_num,
-                                            (1 - dist_fac) * (threshold),
-                                            user_max_rates,
-                                            session_min_rates,
-                                            step_size,
-                                            central_scale,
-                                            gen_prob,
+    params1 = [H_num, gen_prob, user_max_rates,
+               session_min_rates, step_size,
+               central_scale]
+    (q1, rts1, d1) = sim_QL_w_rate_feedback(NumUsers, params1,
                                             max_sched_per_q, iters)
     (q2, rts2, d2) = sim_QL_w_rate_feedback(NumUsers, H_num,
                                             threshold,
@@ -267,7 +267,6 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
                                             session_min_rates,
                                             step_size,
                                             central_scale,
-                                            gen_prob,
                                             max_sched_per_q, iters)
     (q3, rts3, d3) = sim_QL_w_rate_feedback(NumUsers, H_num,
                                             (1 + dist_fac) * threshold,
@@ -275,7 +274,6 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
                                             session_min_rates,
                                             step_size,
                                             central_scale,
-                                            gen_prob,
                                             max_sched_per_q, iters)
 
     Nexcl = 1000
@@ -376,15 +374,21 @@ def study_algorithm(NumUsers: int,
     # Nexcl = 1000
     Nexcl = 0
     average_requests = np.zeros(iters)
-    params = [H_num, threshold, user_max_rates, session_min_rates, step_size,
-              central_scale]
+    if param_change:
+        change_key = 'ChangeH'
+        indices = np.linspace(iters/10, iters, 10)
+        params = [H_num, gen_prob, user_max_rates, session_min_rates,
+                  step_size, central_scale, change_key, indices]
+    else:
+        params = [H_num, gen_prob, user_max_rates, session_min_rates,
+                  step_size, central_scale]
 
     for run in range(runs):
         if (run % 10) == 0:
             print(run)
         (queues,
          requested_rates,
-         delivered_rates) = sim_QL_w_rate_feedback(NumUsers, params, gen_prob,
+         delivered_rates) = sim_QL_w_rate_feedback(NumUsers, params,
                                                    max_sched_per_q, iters,
                                                    param_change)
         sum_rates = np.zeros(iters)
