@@ -1,3 +1,4 @@
+import multiprocessing
 import numpy as np
 from scipy.special import binom as bc
 from typing import Tuple
@@ -141,33 +142,43 @@ def update_rates(NumUsers: int, NQs: int,
     return rates
 
 
-def vary_H(params: Tuple, max_H: int, min_H: int) -> Tuple:
+def vary_H(H_num: int, max_H: int, min_H: int) -> int:
 
-    H_num = params[0]
     compar = random()
     if (compar > 0.5) and ((H_num + 1) <= max_H):
-        params[0] = H_num + 1
+        H_num += 1
     elif (compar <= 0.5) and ((H_num - 1) >= min_H):
-        params[0] = H_num - 1
+        H_num -= 1
 
-    return params
+    return H_num
 
 
 # should set up to also track rate recieved
 def sim_QL_w_rate_feedback(NumUsers: int,
-                           params: Tuple,
-                           max_sched_per_q: int,
-                           iters: int,
-                           param_change: bool) -> Tuple[np.ndarray, np.ndarray,
-                                                        np.ndarray, list,
-                                                        list, list]:
+                           params: dict,
+                           run: int,
+                           trk_list: list) -> Tuple[np.ndarray, np.ndarray,
+                                                    np.ndarray, list]:
 
-    # unpack param tuple
-    H_num, gen_prob, user_max_rates, session_min_rates = params[:4]
-    step_size, central_scale = params[4:]
+    # local param copy
+    loc_params = dict(params)
+    # unpack params
+    iters = loc_params['iters']
+
+    H_num, p_gen = loc_params['H_num'], loc_params['p_gen']
+    user_max_rates = loc_params['user_max_rates']
+    session_min_rates = loc_params['session_min_rates']
+
+    step_size = loc_params['step_size']
+    max_sched_per_q = loc_params['max_sched_per_q']
+
+    param_change = loc_params['param_change']
 
     max_H = H_num + 1
     min_H = H_num - 1
+
+    threshold = ((H_num * p_gen)
+                 // (1/10000)) / 10000  # Truncate at 4th place
 
     NQs = int(bc(NumUsers, 2))
     queue_lengths = np.zeros((NQs, iters))
@@ -178,7 +189,7 @@ def sim_QL_w_rate_feedback(NumUsers: int,
     # record user sessions
     userSessions = partition_sessions_by_user(NumUsers, NQs)
     # session max rates
-    session_max_rates = [max_sched_per_q * gen_prob] * NQs
+    session_max_rates = [max_sched_per_q * p_gen] * NQs
     # initial price vector (zero for empty queues)
     price_vector = [0] * (1 + NumUsers)
 
@@ -193,26 +204,36 @@ def sim_QL_w_rate_feedback(NumUsers: int,
         # Get submitted requests
         arrivals = gen_arrivals(NumUsers, rates)
 
-        if x > 0:
+        # if (x == 0) and (run == 0):
+        #     trk_list.append(H_num)
+        #     queue_lengths[:, x] = arrivals[:]
+
+        if (x > 0):
 
             if param_change:
-                change_key = params[6]
 
-                if (change_key == 'ChangeH') and (x in params[7]):
-                    vary_H(params, max_H, min_H)
-                # unpack param tuple
-                # repeating to allow changes between iters
-                H_num, gen_prob, user_max_rates, session_min_rates = params[:4]
-                step_size, central_scale = params[4:]
+                change_key = loc_params['change_key']
 
-                threshold = ((H_num * gen_prob)
-                             // (1/10000)) / 10000  # Truncate at 4th place
+                if (change_key == 'ChangeH') and (x in loc_params['indices']):
+
+                    if run > 0:
+                        eval = np.where(loc_params['indices'] == x)[0][0]
+                        loc_params['H_num'] = trk_list[eval]
+
+                    else:
+                        loc_params['H_num'] = vary_H(H_num, max_H, min_H)
+                        trk_list.append(loc_params['H_num'])
+
+                    H_num = loc_params['H_num']
+                    threshold = ((H_num * p_gen)
+                                 // (1/10000)) / 10000  # Truncate at 4th place
+                    loc_params['central_scale'] = 1 / threshold
 
             # based on prices, sources update rates
             price_vector = update_prices(NumUsers, userSessions,
                                          threshold, user_max_rates,
                                          step_size,
-                                         central_scale,
+                                         loc_params['central_scale'],
                                          queue_lengths[:, x - 1],
                                          rate_track[:, x - 1])
             rates = update_rates(NumUsers, NQs, price_vector,
@@ -222,7 +243,7 @@ def sim_QL_w_rate_feedback(NumUsers: int,
 
             # for current schedule, do link gen
             schedule = model_probabilistic_link_gen(NumUsers,
-                                                    gen_prob,
+                                                    p_gen,
                                                     schedule)
 
             # track delivery of entangled pairs to sessions
@@ -241,7 +262,7 @@ def sim_QL_w_rate_feedback(NumUsers: int,
                                      queue_lengths[:, x],
                                      max_sched_per_q)
 
-    return (queue_lengths, rate_track, delivered)
+    return (queue_lengths, rate_track, delivered, trk_list)
 
 
 def study_balance_near_threshold(NumUsers: int, H_num: int,
@@ -249,32 +270,20 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
                                  session_min_rates: list,
                                  step_size: float,
                                  central_scale: float,
-                                 gen_prob: float,
+                                 p_gen: float,
                                  max_sched_per_q: int,
                                  iters: int, dist_fac: float) -> None:
 
-    threshold = ((H_num * gen_prob)
+    threshold = ((H_num * p_gen)
                  // (1/10000)) / 10000  # Truncate at 4th place
 
-    params1 = [H_num, gen_prob, user_max_rates,
-               session_min_rates, step_size,
-               central_scale]
-    (q1, rts1, d1) = sim_QL_w_rate_feedback(NumUsers, params1,
-                                            max_sched_per_q, iters)
-    (q2, rts2, d2) = sim_QL_w_rate_feedback(NumUsers, H_num,
-                                            threshold,
-                                            user_max_rates,
-                                            session_min_rates,
-                                            step_size,
-                                            central_scale,
-                                            max_sched_per_q, iters)
-    (q3, rts3, d3) = sim_QL_w_rate_feedback(NumUsers, H_num,
-                                            (1 + dist_fac) * threshold,
-                                            user_max_rates,
-                                            session_min_rates,
-                                            step_size,
-                                            central_scale,
-                                            max_sched_per_q, iters)
+    params = load_params(NumUsers)
+    params['p_gen'] = (1 - dist_fac) * p_gen
+    (q1, rts1, d1) = sim_QL_w_rate_feedback(NumUsers, params, 0, [])
+    params['p_gen'] = p_gen
+    (q2, rts2, d2) = sim_QL_w_rate_feedback(NumUsers, params, 0, [])
+    params['p_gen'] = (1 + dist_fac) * p_gen
+    (q3, rts3, d3) = sim_QL_w_rate_feedback(NumUsers, params, 0, [])
 
     Nexcl = 1000
     pltQStab = True
@@ -288,12 +297,12 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
             ql2[x - Nexcl] = np.sum(q2[:, x], axis=0)
             ql3[x - Nexcl] = np.sum(q3[:, x], axis=0)
 
-        p_whole = int(1000 * gen_prob)
+        p_whole = int(1000 * p_gen)
         figname = '../Figures/AlgAdjust/QStab_LR_{}_{}_{}'.format(
                 NumUsers, H_num, p_whole)
 
         plot_queue_stability(ql1, ql2, ql3, NumUsers, H_num,
-                             gen_prob, threshold, dist_fac, (iters - Nexcl),
+                             p_gen, threshold, dist_fac, (iters - Nexcl),
                              figname)
 
     pltTotRts = True
@@ -303,11 +312,11 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
             sum_rates[0, x - Nexcl] = np.sum(rts1[:, x], axis=0)
             sum_rates[1, x - Nexcl] = np.sum(rts2[:, x], axis=0)
             sum_rates[2, x - Nexcl] = np.sum(rts3[:, x], axis=0)
-        p_whole = int(1000 * gen_prob)
+        p_whole = int(1000 * p_gen)
         figname = '../Figures/AlgAdjust/RateTotals_LR_{}_{}_{}'.format(
                 NumUsers, H_num, p_whole)
 
-        plot_total_rates(sum_rates, NumUsers, H_num, gen_prob, threshold,
+        plot_total_rates(sum_rates, NumUsers, H_num, p_gen, threshold,
                          dist_fac, (iters - Nexcl), figname, True)
 
     pltRtProfile = True
@@ -316,8 +325,9 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
         all_rates = [rts1[:, Nexcl:iters], rts2[:, Nexcl:iters],
                      rts3[:, Nexcl:iters]]
 
-        plot_rate_profile(all_rates, NumUsers, H_num, gen_prob, threshold,
-                          dist_fac, (iters - Nexcl))
+        tag = 'UniformFixed'
+        plot_rate_profile(all_rates, NumUsers, H_num, p_gen, threshold,
+                          dist_fac, (iters - Nexcl), 1, False, tag)
 
     pltIdvQs = False
     if pltIdvQs:
@@ -346,7 +356,7 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
                 for y in range(ptsInAvrg):
                     sum += np.sum(deliveries[dv][:, x - y])
                 avrgs[dv, x - ptsInAvrg] = sum / ptsInAvrg
-        p_whole = int(1000 * gen_prob)
+        p_whole = int(1000 * p_gen)
         figname = '../Figures/AlgAdjust/DeliveryRates_LR_{}_{}_{}'.format(
                 NumUsers, H_num, p_whole)
 
@@ -355,42 +365,50 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
 
     return
 
+# H_num: int,
+# user_max_rates: list,
+# session_min_rates: list,
+# step_size: float,
+# central_scale: float,
+# p_gen: float,
+# max_sched_per_q: int,
+# iters: int, runs: int,
+# dist_fac: float,
+# param_change: bool
+
 
 # use distance fac for plotting guidelines?
 def study_algorithm(NumUsers: int,
-                    H_num: int,
-                    user_max_rates: list,
-                    session_min_rates: list,
-                    step_size: float,
-                    central_scale: float,
-                    gen_prob: float,
-                    max_sched_per_q: int,
-                    iters: int, runs: int,
-                    dist_fac: float,
-                    param_change: bool) -> None:
+                    params: dict) -> None:
 
-    threshold = ((H_num * gen_prob)
+    # unpack params
+    iters, runs, dist_fac = params['iters'], params['runs'], params['dist_fac']
+    H_num, p_gen = params['H_num'], params['p_gen']
+    Nexcl = params['Nexcl']
+
+    threshold = ((H_num * p_gen)
                  // (1/10000)) / 10000  # Truncate at 4th place
-    # Nexcl = 1000
-    Nexcl = 0
+
     average_requests = np.zeros(iters)
-    if param_change:
-        change_key = 'ChangeH'
-        indices = np.linspace(iters/10, iters, 10)
-        params = [H_num, gen_prob, user_max_rates, session_min_rates,
-                  step_size, central_scale, change_key, indices]
-    else:
-        params = [H_num, gen_prob, user_max_rates, session_min_rates,
-                  step_size, central_scale]
+    trk_list = []
+
+    #  #set up multiprocessing
+    # manager=multiprocessing.Manager() #create manager to handle shared objects
+    # FO=manager.Array('f',fidsOut) #Proxy for shared array
+    # mypool=multiprocessing.Pool(multiprocessing.cpu_count()) #Create pool of worker processes
+    # #update fidelities
+    # mypool.map(get_fidsOut,[(gate_er,state_param_list,dim,num_nodes,graph_type,csubP,iters,repeats,FO,x) for x in range(repeats)])
 
     for run in range(runs):
         if (run % 10) == 0:
             print(run)
         (queues,
          requested_rates,
-         delivered_rates) = sim_QL_w_rate_feedback(NumUsers, params,
-                                                   max_sched_per_q, iters,
-                                                   param_change)
+         delivered_rates,
+         trk_list) = sim_QL_w_rate_feedback(NumUsers,
+                                            params,
+                                            run,
+                                            trk_list)
         sum_rates = np.zeros(iters)
         for x in range(Nexcl, iters):
             sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
@@ -398,52 +416,93 @@ def study_algorithm(NumUsers: int,
 
     average_requests *= (1 / runs)
 
-    p_whole = int(1000 * gen_prob)
-    figname = '../Figures/AlgAdjust/AvRequestRates_{}_{}_{}_{}_{}'.format(
-            NumUsers, H_num, p_whole, runs, int(100 * dist_fac))
+    p_whole = int(1000 * p_gen)
+    if params['param_change']:
+        tag = params['change_key']
+        fgnm = '../Figures/AlgAdjust/AvRequestRates_{}_{}_{}_{}_{}_{}'.format(
+                NumUsers, H_num, p_whole, runs, int(100 * dist_fac), tag)
+    else:
+        fgnm = '../Figures/AlgAdjust/AvRequestRates_{}_{}_{}_{}_{}'.format(
+                NumUsers, H_num, p_whole, runs, int(100 * dist_fac))
 
     pltTotRts = True
     if pltTotRts:
-        plot_total_rates(average_requests, NumUsers, H_num,
-                         gen_prob, threshold, dist_fac,
-                         iters, figname, False)
+        plot_total_rates(average_requests, NumUsers, params,
+                         trk_list, fgnm, False)
 
     pltRtProfile = True
     tag = 'UniformFixed'
     if pltRtProfile:
         plot_rate_profile(requested_rates[:, Nexcl:], NumUsers, H_num,
-                          gen_prob, threshold,
-                          dist_fac, (iters - Nexcl), False, tag)
+                          p_gen, threshold,
+                          dist_fac, (iters - Nexcl),
+                          runs, False, tag)
     return
 
 
-NumUsers = 4
-H_num = 2
-max_sched_per_q = 1
-NQs = int(bc(NumUsers, 2))
-p_gen = 0.05
-global_scale = 1000
-iters = 10001
-runs = 1000
-dist_fac = 0.01
-# step_size = 1
-lambda_Switch = H_num * p_gen
-# Should relate to timescale of system
-# One node can be involved in N-1 sessions
-# per session a mx of p_gen ent generated per slot
-# maybe one user can deal with a max of ((NQs - 1) / 2) * p_gen pair generated
-# per slot, as example where user cutoffs are actually relevant
-# user_max_rates = [((NQs - 1) / 2) * p_gen] * NumUsers
-user_max_rates = [H_num * p_gen] * NumUsers
-# try user_max_rates set to NQs for case when they are not relevant
-# user_max_rates = [NQs] * NQs
-session_min_rates = [p_gen / global_scale] * NQs
-param_change = False
+def load_params(NumUsers: int) -> dict:
+
+    iters = 20000
+    runs = 1000
+    dist_fac = 0.02
+
+    Nexcl = 0
+
+    H_num = 2
+    p_gen = 0.05
+    global_scale = 1000
+    max_sched_per_q = 1
+    lambda_Switch = H_num * p_gen
+    NQs = int(bc(NumUsers, 2))
+
+    # Should relate to timescale of system
+    # One node can be involved in N-1 sessions
+    # per session a mx of p_gen ent generated per slot
+    # maybe a user can deal with max of ((NQs - 1) / 2) * p_gen pair generated
+    # per slot, as example where user cutoffs are actually relevant
+    user_max_rates = [((NQs - 1) / 2) * p_gen] * NumUsers
+    # user_max_rates = [lambda_Switch] * NumUsers
+    # try user_max_rates set to NQs for case when they are not relevant
+    # user_max_rates = [NQs] * NQs
+
+    session_min_rates = [p_gen / global_scale] * NQs
+    step_size = 1
+    central_scale = 1 / lambda_Switch
+
+    param_change = True
+
+    # Possible change keys:
+    # False, 'ChangeH'
+    change_key = 'ChangeH'
+    changes = 10
+    indices = np.linspace(iters/changes, iters, changes)
+
+    params = {
+        'H_num': H_num,
+        'p_gen': p_gen,
+        'max_sched_per_q': max_sched_per_q,
+        'user_max_rates': user_max_rates,
+        'session_min_rates': session_min_rates,
+        'step_size': step_size,
+        'central_scale': central_scale,
+        'param_change': param_change,
+        'change_key': change_key,
+        'indices': indices,
+        'iters': iters,
+        'runs': runs,
+        'dist_fac': dist_fac,
+        'Nexcl': Nexcl,
+        'changes': changes
+    }
+
+    return params
+
+
+NumUsers = 10
+params = load_params(NumUsers)
 
 # study_balance_near_threshold(NumUsers, H_num, user_max_rates,
 #                              session_min_rates, step_size,
 #                              p_gen, max_sched_per_q,
 #                              iters, dist_fac)
-study_algorithm(NumUsers, H_num, user_max_rates, session_min_rates,
-                1, 1/lambda_Switch, p_gen, max_sched_per_q,
-                iters, runs, dist_fac, param_change)
+study_algorithm(NumUsers, params)
