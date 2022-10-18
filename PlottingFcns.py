@@ -74,7 +74,7 @@ def plot_total_rates(rates: np.ndarray, NumUsers: int, params: dict,
                          color=cmap(inds[1]),
                          label=r'$(1 - \delta)\lambda_{Switch}$')
                 plt.legend(fontsize=22, framealpha=0.6, loc=1)
-                plt.ylim(0.5 * min(thresholds), 1.5 * max(thresholds))
+                plt.ylim(0.8 * min(thresholds), 1.2 * max(thresholds))
 
         else:
             H_num, p_gen = params['H_num'], params['p_gen']
