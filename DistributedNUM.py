@@ -1,4 +1,5 @@
-import multiprocessing
+import os
+import time
 import numpy as np
 from scipy.special import binom as bc
 from typing import Tuple
@@ -392,13 +393,6 @@ def study_algorithm(NumUsers: int,
     average_requests = np.zeros(iters)
     trk_list = []
 
-    #  #set up multiprocessing
-    # manager=multiprocessing.Manager() #create manager to handle shared objects
-    # FO=manager.Array('f',fidsOut) #Proxy for shared array
-    # mypool=multiprocessing.Pool(multiprocessing.cpu_count()) #Create pool of worker processes
-    # #update fidelities
-    # mypool.map(get_fidsOut,[(gate_er,state_param_list,dim,num_nodes,graph_type,csubP,iters,repeats,FO,x) for x in range(repeats)])
-
     for run in range(runs):
         if (run % 10) == 0:
             print(run)
@@ -442,8 +436,8 @@ def study_algorithm(NumUsers: int,
 
 def load_params(NumUsers: int) -> dict:
 
-    iters = 20000
-    runs = 1000
+    iters = 100
+    runs = 10
     dist_fac = 0.02
 
     Nexcl = 0
@@ -492,13 +486,26 @@ def load_params(NumUsers: int) -> dict:
         'runs': runs,
         'dist_fac': dist_fac,
         'Nexcl': Nexcl,
-        'changes': changes
+        'changes': changes,
+        'timeString': time.strftime("%Y%m%d-%H%M%S")
     }
+
+    dirName = '../DataOutput/{}'.format(params['timeString'])
+    fileName = dirName + '/paramLog.txt'
+
+    if not os.path.isdir(dirName):
+        os.mkdir(dirName)
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+
+        for key, value in params.items():
+            afile.write('{}: {}\n'.format(key, value))
+        afile.close()
 
     return params
 
 
-NumUsers = 10
+NumUsers = 4
 params = load_params(NumUsers)
 
 # study_balance_near_threshold(NumUsers, H_num, user_max_rates,
