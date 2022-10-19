@@ -175,8 +175,8 @@ def sim_QL_w_rate_feedback(NumUsers: int,
 
     param_change = loc_params['param_change']
 
-    max_H = H_num + 1
-    min_H = H_num - 1
+    max_H = H_num
+    min_H = 1
 
     threshold = ((H_num * p_gen)
                  // (1/10000)) / 10000  # Truncate at 4th place
@@ -432,13 +432,13 @@ def study_algorithm(NumUsers: int,
 
 def load_params(NumUsers: int) -> dict:
 
-    iters = 100
-    runs = 10
+    iters = 10000
+    runs = 1000
     dist_fac = 0.02
 
     Nexcl = 0
 
-    H_num = 2
+    H_num = 3
     p_gen = 0.05
     global_scale = 1000
     max_sched_per_q = 1
@@ -530,7 +530,7 @@ def record_dataSets(average_requests: np.ndarray,
     return
 
 
-NumUsers = 4
+NumUsers = 10
 params = load_params(NumUsers)
 record_NumUsers(NumUsers, params)
 
