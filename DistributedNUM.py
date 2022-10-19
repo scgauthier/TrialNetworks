@@ -43,7 +43,7 @@ def users_to_session_id(NumUsers: int, user_u: int,
     return session_id
 
 
-def session_id_to_users(NumUsers: int, session_id: int) -> list[int]:
+def session_id_to_users(NumUsers: int, session_id: int) -> list:
 
     # start with block 1
     x = 0
@@ -85,7 +85,7 @@ def update_prices(NumUsers: int, userSessions: np.ndarray,
                   step_size: float,
                   central_scale: float,
                   lastT_queue_lengths: np.ndarray,
-                  lastT_rates: np.ndarray) -> list[int]:
+                  lastT_rates: np.ndarray) -> list:
 
     sum_session_rates = np.sum(lastT_rates)
     sum_ql = np.sum(lastT_queue_lengths)
@@ -117,9 +117,9 @@ def update_prices(NumUsers: int, userSessions: np.ndarray,
 # for now: assume log utility functions with weights all equal to constraints
 # this performs gradient projection
 def update_rates(NumUsers: int, NQs: int,
-                 price_vector: list[int],
+                 price_vector: list,
                  session_min_rates: list,
-                 session_max_rates: list) -> list[float]:
+                 session_max_rates: list) -> list:
 
     rates = []
     for s in range(NQs):
