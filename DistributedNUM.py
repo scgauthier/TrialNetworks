@@ -386,11 +386,13 @@ def study_algorithm(NumUsers: int,
     iters, runs, dist_fac = params['iters'], params['runs'], params['dist_fac']
     H_num, p_gen = params['H_num'], params['p_gen']
     Nexcl = params['Nexcl']
+    NQs = int(bc(NumUsers, 2))
 
     threshold = ((H_num * p_gen)
                  // (1/10000)) / 10000  # Truncate at 4th place
 
     average_requests = np.zeros(iters)
+    rate_profile = np.zeros((NQs, iters))
     trk_list = []
 
     for run in range(runs):
@@ -406,18 +408,18 @@ def study_algorithm(NumUsers: int,
         sum_rates = np.zeros(iters)
         for x in range(Nexcl, iters):
             sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
+
         average_requests += sum_rates
+        rate_profile += requested_rates
 
     average_requests *= (1 / runs)
+    rate_profile *= (1 / runs)
 
-    p_whole = int(1000 * p_gen)
-    if params['param_change']:
-        tag = params['change_key']
-        fgnm = '../Figures/AlgAdjust/AvRequestRates_{}_{}_{}_{}_{}_{}'.format(
-                NumUsers, H_num, p_whole, runs, int(100 * dist_fac), tag)
-    else:
-        fgnm = '../Figures/AlgAdjust/AvRequestRates_{}_{}_{}_{}_{}'.format(
-                NumUsers, H_num, p_whole, runs, int(100 * dist_fac))
+    record_dataSets(average_requests,
+                    rate_profile,
+                    params)
+
+    fgnm = '../DataOutput/{}'.format(params['timeStr']) + '/AvReqRates'
 
     pltTotRts = True
     if pltTotRts:
@@ -427,7 +429,8 @@ def study_algorithm(NumUsers: int,
     pltRtProfile = True
     tag = 'UniformFixed'
     if pltRtProfile:
-        plot_rate_profile(requested_rates[:, Nexcl:], NumUsers, H_num,
+        plot_rate_profile(rate_profile[:, Nexcl:], params,
+                          NumUsers, H_num,
                           p_gen, threshold,
                           dist_fac, (iters - Nexcl),
                           runs, False, tag)
@@ -487,10 +490,10 @@ def load_params(NumUsers: int) -> dict:
         'dist_fac': dist_fac,
         'Nexcl': Nexcl,
         'changes': changes,
-        'timeString': time.strftime("%Y%m%d-%H%M%S")
+        'timeStr': time.strftime("%Y%m%d-%H%M%S")
     }
 
-    dirName = '../DataOutput/{}'.format(params['timeString'])
+    dirName = '../DataOutput/{}'.format(params['timeStr'])
     fileName = dirName + '/paramLog.txt'
 
     if not os.path.isdir(dirName):
@@ -505,8 +508,38 @@ def load_params(NumUsers: int) -> dict:
     return params
 
 
+def record_NumUsers(NumUsers: int, params: dict) -> None:
+    # write number of users to param file
+    fileName = '../DataOutput/{}'.format(params['timeStr']) + '/paramLog.txt'
+    afile = open(fileName, 'a')
+    afile.write('NumUsers: {}'.format(NumUsers))
+    afile.close()
+    return
+
+
+def record_dataSets(average_requests: np.ndarray,
+                    rate_profile: np.ndarray,
+                    params: dict) -> None:
+
+    fileName = '../DataOutput/{}'.format(params['timeStr']) + '/AvReq.txt'
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        np.savetxt(afile, average_requests)
+        afile.close()
+
+    fileName = '../DataOutput/{}'.format(params['timeStr']) + '/RtProf.txt'
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        for row in rate_profile:
+            np.savetxt(afile, row)
+        afile.close()
+
+    return
+
+
 NumUsers = 4
 params = load_params(NumUsers)
+record_NumUsers(NumUsers, params)
 
 # study_balance_near_threshold(NumUsers, H_num, user_max_rates,
 #                              session_min_rates, step_size,
