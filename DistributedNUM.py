@@ -383,13 +383,9 @@ def study_algorithm(NumUsers: int,
                     params: dict) -> None:
 
     # unpack params
-    iters, runs, dist_fac = params['iters'], params['runs'], params['dist_fac']
-    H_num, p_gen = params['H_num'], params['p_gen']
+    iters, runs = params['iters'], params['runs']
     Nexcl = params['Nexcl']
     NQs = int(bc(NumUsers, 2))
-
-    threshold = ((H_num * p_gen)
-                 // (1/10000)) / 10000  # Truncate at 4th place
 
     average_requests = np.zeros(iters)
     rate_profile = np.zeros((NQs, iters))
@@ -427,13 +423,10 @@ def study_algorithm(NumUsers: int,
                          trk_list, fgnm, False)
 
     pltRtProfile = True
-    tag = 'UniformFixed'
     if pltRtProfile:
-        plot_rate_profile(rate_profile[:, Nexcl:], params,
-                          NumUsers, H_num,
-                          p_gen, threshold,
-                          dist_fac, (iters - Nexcl),
-                          runs, False, tag)
+        fgnm = '../DataOutput/{}'.format(params['timeStr']) + '/RateProfile'
+        plot_rate_profile(rate_profile[:, Nexcl:], params, fgnm, False)
+
     return
 
 

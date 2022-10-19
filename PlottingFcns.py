@@ -99,10 +99,15 @@ def plot_total_rates(rates: np.ndarray, NumUsers: int, params: dict,
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
 
-def plot_rate_profile(all_rates: List[np.ndarray], NumUsers: int,
-                      H_num: int, p_gen: float, threshold: float,
-                      dist_fac: float, iters: int, runs: int,
-                      multiple: bool, tag: str) -> None:
+def plot_rate_profile(all_rates: List[np.ndarray], params: dict,
+                      fgnm: str, multiple: bool) -> None:
+
+    NumUsers, H_num = params['NumUsers'], params['H_num']
+    p_gen, dist_fac = params['p_gen'], params['dist_fac']
+    iters, runs = params['iters'], params['runs']
+
+    threshold = ((H_num * p_gen)
+                 // (1/10000)) / 10000  # Truncate at 4th place
 
     cmap = plt.cm.get_cmap('plasma')
     NQs = int(bc(NumUsers, 2))
@@ -135,8 +140,6 @@ def plot_rate_profile(all_rates: List[np.ndarray], NumUsers: int,
             plt.xlabel('t', fontsize=24)
             plt.ylabel('Session request rates', fontsize=24)
 
-            fgname = '../Figures/AlgAdjust/RateProfile_{}_{}_{}_{}'.format(
-                      NumUsers, H_num, runs, tag)
             plt.savefig(fgname, dpi=300, bbox_inches='tight')
 
 
