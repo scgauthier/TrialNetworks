@@ -1,5 +1,4 @@
 import os
-import time
 import numpy as np
 from scipy.special import binom as bc
 from typing import Tuple
@@ -417,12 +416,12 @@ def study_algorithm(NumUsers: int,
 
     fgnm = '../DataOutput/{}'.format(params['timeStr']) + '/AvReqRates'
 
-    pltTotRts = True
+    pltTotRts = False
     if pltTotRts:
         plot_total_rates(average_requests, NumUsers, params,
                          trk_list, fgnm, False)
 
-    pltRtProfile = True
+    pltRtProfile = False
     if pltRtProfile:
         fgnm = '../DataOutput/{}'.format(params['timeStr']) + '/RateProfile'
         plot_rate_profile(rate_profile[:, Nexcl:], params, fgnm, False)
