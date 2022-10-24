@@ -419,6 +419,8 @@ def study_algorithm(NumUsers: int,
                                                               average_requests,
                                                               rate_profile,
                                                               run)
+        print(type(sum_rates, '\n\n', np.shape(sum_rates)))
+        print(type(average_requests, '\n\n', np.shape(average_requests)))
         average_requests += sum_rates
         rate_profile += requested_rates
 
