@@ -412,7 +412,19 @@ def study_algorithm(NumUsers: int,
 
     ray.init(num_cpus=num_cpus)
 
-    for run in range(runs):
+    (queues,
+     requested_rates,
+     delivered_rates,
+     trk_list) = sim_QL_w_rate_feedback(NumUsers,
+                                        params,
+                                        0,
+                                        trk_list)
+    sum_rates = np.zeros(iters)
+    for x in range(Nexcl, iters):
+        sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
+    record_midProcess(sum_rates, requested_rates, params, 0)
+
+    for run in range(1, runs):
         wrapper_for_study.remote(NumUsers,
                                  params,
                                  trk_list,
