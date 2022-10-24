@@ -368,7 +368,7 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
     return
 
 
-@ray.remote
+@ray.remote(num_returns=2)
 def wrapper_for_study(NumUsers: int,
                       params: dict,
                       trk_list: list,
