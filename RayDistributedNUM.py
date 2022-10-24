@@ -390,7 +390,9 @@ def wrapper_for_study(NumUsers: int,
     for x in range(Nexcl, iters):
         sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
 
-    return sum_rates, requested_rates
+    record_midProcess(sum_rates, requested_rates, params, run)
+
+    return
 
 
 # use distance fac for plotting guidelines?
@@ -411,19 +413,24 @@ def study_algorithm(NumUsers: int,
     ray.init(num_cpus=num_cpus)
 
     for run in range(runs):
-        sum_rates, requested_rates = wrapper_for_study.remote(NumUsers,
-                                                              params,
-                                                              trk_list,
-                                                              iters,
-                                                              Nexcl,
-                                                              average_requests,
-                                                              rate_profile,
-                                                              run)
-        print(type(sum_rates), '\n\n', np.shape(sum_rates))
-        print(type(average_requests), '\n\n', np.shape(average_requests))
-        average_requests += sum_rates
-        rate_profile += requested_rates
+        wrapper_for_study.remote(NumUsers,
+                                 params,
+                                 trk_list,
+                                 iters,
+                                 Nexcl,
+                                 average_requests,
+                                 rate_profile,
+                                 run)
 
+    for run in range(runs):
+        dirName = '../DataOutput/{}'.format(params['timeStr']) + '/SR'
+        fileName = dirName + '/{}.txt'.format(run)
+        if os.path.isfile(fileName):
+            average_requests += np.loadtxt(fileName)
+        dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
+        fileName = dirName + '/{}.txt'.format(run)
+        if os.path.isfile(fileName):
+            rate_profile += np.loadtxt(fileName).reshape(NQs, iters)
     average_requests *= (1 / runs)
     rate_profile *= (1 / runs)
 
@@ -473,3 +480,27 @@ def record_dataSets(average_requests: np.ndarray,
         afile.close()
 
     return
+
+
+def record_midProcess(sum_rates: np.ndarray,
+                      rate_requests: np.ndarray,
+                      params: dict,
+                      run: int) -> None:
+    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/SR'
+    if not os.path.isdir(dirName):
+        os.mkdir(dirName)
+    fileName = dirName + '/{}.txt'.format(run)
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        np.savetxt(afile, sum_rates)
+        afile.close()
+
+    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
+    if not os.path.isdir(dirName):
+        os.mkdir(dirName)
+    fileName = dirName + '/{}.txt'.format(run)
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        for row in rate_requests:
+            np.savetxt(afile, row)
+        afile.close()
