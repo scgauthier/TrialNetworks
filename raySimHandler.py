@@ -76,7 +76,7 @@ def load_params(NumUsers: int) -> dict:
     return params
 
 
-NumUsers = 100
+NumUsers = 10
 params = load_params(NumUsers)
 record_NumUsers(NumUsers, params)
 
