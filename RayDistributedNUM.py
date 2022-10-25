@@ -368,7 +368,7 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
     return
 
 
-@ray.remote(num_returns=2)
+@ray.remote
 def wrapper_for_study(NumUsers: int,
                       params: dict,
                       trk_list: list,
@@ -377,8 +377,6 @@ def wrapper_for_study(NumUsers: int,
                       average_requests: np.ndarray,
                       rate_profile: np.ndarray,
                       run: int) -> list:
-    if (run % 100) == 0:
-        print(run)
     (queues,
      requested_rates,
      delivered_rates,
@@ -425,6 +423,9 @@ def study_algorithm(NumUsers: int,
     record_midProcess(sum_rates, requested_rates, params, 0)
 
     for run in range(1, runs):
+        if (run % 100) == 0:
+            print(run)
+
         wrapper_for_study.remote(NumUsers,
                                  params,
                                  trk_list,
@@ -469,7 +470,7 @@ def record_NumUsers(NumUsers: int, params: dict) -> None:
     # write number of users to param file
     fileName = '../DataOutput/{}'.format(params['timeStr']) + '/paramLog.txt'
     afile = open(fileName, 'a')
-    afile.write('NumUsers: {}'.format(NumUsers))
+    afile.write('NumUsers: {}\n'.format(NumUsers))
     afile.close()
     return
 
