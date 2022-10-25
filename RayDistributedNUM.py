@@ -421,7 +421,7 @@ def study_algorithm(NumUsers: int,
     for x in range(Nexcl, iters):
         sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
     record_midProcess(sum_rates, requested_rates, params, 0)
-
+    print(runs)
     for run in range(1, runs):
         if (run % 100) == 0:
             print(run)
