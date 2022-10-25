@@ -7,8 +7,8 @@ from RayDistributedNUM import record_NumUsers, study_algorithm
 
 def load_params(NumUsers: int) -> dict:
 
-    iters = 10000
-    runs = 1000
+    iters = 1000
+    runs = 100
     dist_fac = 0.02
 
     Nexcl = 0
@@ -76,7 +76,7 @@ def load_params(NumUsers: int) -> dict:
     return params
 
 
-NumUsers = 10
+NumUsers = 4
 params = load_params(NumUsers)
 record_NumUsers(NumUsers, params)
 

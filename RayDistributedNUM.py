@@ -387,7 +387,7 @@ def wrapper_for_study(NumUsers: int,
     sum_rates = np.zeros(iters)
     for x in range(Nexcl, iters):
         sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
-
+    print(sum_rates[0])
     record_midProcess(sum_rates, requested_rates, params, run)
 
     return
