@@ -7,7 +7,7 @@ from RayDistributedNUM import record_NumUsers, study_algorithm
 
 def load_params(NumUsers: int) -> dict:
 
-    iters = 1000
+    iters = 100
     runs = 100
     dist_fac = 0.02
 
