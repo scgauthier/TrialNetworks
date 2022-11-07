@@ -2,7 +2,7 @@ import os
 import time
 import numpy as np
 from scipy.special import binom as bc
-from DistributedNUM import record_NumUsers, study_algorithm
+from MultiProcDistributedNUM import record_NumUsers, study_algorithm
 
 
 def load_params(NumUsers: int) -> dict:
@@ -77,12 +77,13 @@ def load_params(NumUsers: int) -> dict:
     return params
 
 
-NumUsers = 6
-params = load_params(NumUsers)
-record_NumUsers(NumUsers, params)
+if __name__ == '__main__':
+    NumUsers = 6
+    params = load_params(NumUsers)
+    record_NumUsers(NumUsers, params)
 
-# study_balance_near_threshold(NumUsers, H_num, user_max_rates,
-#                              session_min_rates, step_size,
-#                              p_gen, max_sched_per_q,
-#                              iters, dist_fac)
-study_algorithm(NumUsers, params)
+    # study_balance_near_threshold(NumUsers, H_num, user_max_rates,
+    #                              session_min_rates, step_size,
+    #                              p_gen, max_sched_per_q,
+    #                              iters, dist_fac)
+    study_algorithm(NumUsers, params)

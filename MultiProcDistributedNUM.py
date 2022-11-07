@@ -1,8 +1,9 @@
 import os
+import multiprocessing
 import numpy as np
 from scipy.special import binom as bc
 from typing import Tuple
-from random import random
+from random import random, sample
 
 from ToySwitch import gen_arrivals, model_probabilistic_link_gen
 from ToySwitch import flexible_schedule
@@ -42,7 +43,7 @@ def users_to_session_id(NumUsers: int, user_u: int,
     return session_id
 
 
-def session_id_to_users(NumUsers: int, session_id: int) -> list:
+def session_id_to_users(NumUsers: int, session_id: int) -> list[int]:
 
     # start with block 1
     x = 0
@@ -84,7 +85,7 @@ def update_prices(NumUsers: int, userSessions: np.ndarray,
                   step_size: float,
                   central_scale: float,
                   lastT_queue_lengths: np.ndarray,
-                  lastT_rates: np.ndarray) -> list:
+                  lastT_rates: np.ndarray) -> list[int]:
 
     sum_session_rates = np.sum(lastT_rates)
     sum_ql = np.sum(lastT_queue_lengths)
@@ -116,9 +117,9 @@ def update_prices(NumUsers: int, userSessions: np.ndarray,
 # for now: assume log utility functions with weights all equal to constraints
 # this performs gradient projection
 def update_rates(NumUsers: int, NQs: int,
-                 price_vector: list,
+                 price_vector: list[int],
                  session_min_rates: list,
-                 session_max_rates: list) -> list:
+                 session_max_rates: list) -> list[float]:
 
     rates = []
     for s in range(NQs):
@@ -156,9 +157,9 @@ def vary_H(H_num: int, max_H: int, min_H: int) -> int:
 # should set up to also track rate recieved
 def sim_QL_w_rate_feedback(NumUsers: int,
                            params: dict,
-                           run: int,
-                           trk_list: list) -> Tuple[np.ndarray, np.ndarray,
-                                                    np.ndarray, list]:
+                           trk_list: list,
+                           run: int) -> Tuple[np.ndarray, np.ndarray,
+                                              np.ndarray, list]:
 
     # local param copy
     loc_params = dict(params)
@@ -176,6 +177,7 @@ def sim_QL_w_rate_feedback(NumUsers: int,
 
     max_H = H_num
     min_H = 1
+    # min_H = max(1, H_num - 2)
 
     threshold = ((H_num * p_gen)
                  // (1/10000)) / 10000  # Truncate at 4th place
@@ -279,11 +281,11 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
 
     params = load_params(NumUsers)
     params['p_gen'] = (1 - dist_fac) * p_gen
-    (q1, rts1, d1) = sim_QL_w_rate_feedback(NumUsers, params, 0, [])
+    (q1, rts1, d1) = sim_QL_w_rate_feedback(NumUsers, params, [], 0)
     params['p_gen'] = p_gen
-    (q2, rts2, d2) = sim_QL_w_rate_feedback(NumUsers, params, 0, [])
+    (q2, rts2, d2) = sim_QL_w_rate_feedback(NumUsers, params, [], 0)
     params['p_gen'] = (1 + dist_fac) * p_gen
-    (q3, rts3, d3) = sim_QL_w_rate_feedback(NumUsers, params, 0, [])
+    (q3, rts3, d3) = sim_QL_w_rate_feedback(NumUsers, params, [], 0)
 
     Nexcl = 1000
     pltQStab = True
@@ -319,7 +321,7 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
         plot_total_rates(sum_rates, NumUsers, H_num, p_gen, threshold,
                          dist_fac, (iters - Nexcl), figname, True)
 
-    pltRtProfile = True
+    pltRtProfile = False
     if pltRtProfile:
 
         all_rates = [rts1[:, Nexcl:iters], rts2[:, Nexcl:iters],
@@ -365,71 +367,6 @@ def study_balance_near_threshold(NumUsers: int, H_num: int,
 
     return
 
-# H_num: int,
-# user_max_rates: list,
-# session_min_rates: list,
-# step_size: float,
-# central_scale: float,
-# p_gen: float,
-# max_sched_per_q: int,
-# iters: int, runs: int,
-# dist_fac: float,
-# param_change: bool
-
-
-# use distance fac for plotting guidelines?
-def study_algorithm(NumUsers: int,
-                    params: dict) -> None:
-
-    # unpack params
-    iters, runs = params['iters'], params['runs']
-    Nexcl = params['Nexcl']
-    NQs = int(bc(NumUsers, 2))
-
-    average_requests = np.zeros(iters)
-    rate_profile = np.zeros((NQs, iters))
-    trk_list = []
-
-    for run in range(runs):
-        if (run % 10) == 0:
-            print(run)
-        (queues,
-         requested_rates,
-         delivered_rates,
-         trk_list) = sim_QL_w_rate_feedback(NumUsers,
-                                            params,
-                                            run,
-                                            trk_list)
-        sum_rates = np.zeros(iters)
-        for x in range(Nexcl, iters):
-            sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
-
-        average_requests += sum_rates
-        rate_profile += requested_rates
-
-    average_requests *= (1 / runs)
-    rate_profile *= (1 / runs)
-
-    record_dataSets(average_requests,
-                    rate_profile,
-                    params)
-
-    fgnm = '../DataOutput/{}'.format(params['timeStr']) + '/AvReqRates'
-
-    pltTotRts = False
-    if pltTotRts:
-        plot_total_rates(average_requests, NumUsers, params,
-                         trk_list, fgnm, False)
-
-    pltRtProfile = False
-    if pltRtProfile:
-        fgnm = '../DataOutput/{}'.format(params['timeStr']) + '/RateProfile'
-        plot_rate_profile(rate_profile[:, Nexcl:], params, fgnm, False)
-
-    record_trk_list(trk_list, params)
-
-    return
-
 
 def record_NumUsers(NumUsers: int, params: dict) -> None:
     params['NumUsers'] = NumUsers
@@ -447,6 +384,30 @@ def record_trk_list(trk_list: list, params: dict) -> None:
     if not os.path.isfile(fileName):
         afile = open(fileName, 'w')
         np.savetxt(afile, np.array(trk_list))
+        afile.close()
+
+
+def record_midProcess(sum_rates: np.ndarray,
+                      rate_requests: np.ndarray,
+                      params: dict,
+                      run: int) -> None:
+    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/SR'
+    if not os.path.isdir(dirName):
+        os.mkdir(dirName)
+    fileName = dirName + '/{}.txt'.format(run)
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        np.savetxt(afile, sum_rates)
+        afile.close()
+
+    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
+    if not os.path.isdir(dirName):
+        os.mkdir(dirName)
+    fileName = dirName + '/{}.txt'.format(run)
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        for row in rate_requests:
+            np.savetxt(afile, row)
         afile.close()
 
 
@@ -468,3 +429,135 @@ def record_dataSets(average_requests: np.ndarray,
         afile.close()
 
     return
+
+
+def get_runAvrgs(param_tuple: tuple) -> Tuple[np.ndarray, np.ndarray]:
+
+    params, trk_list, run = param_tuple
+    NumUsers, iters = params['NumUsers'], params['iters']
+    Nexcl = params['Nexcl']
+
+    (queues,
+     requested_rates,
+     delivered_rates,
+     trk_list) = sim_QL_w_rate_feedback(NumUsers,
+                                        params,
+                                        trk_list,
+                                        run)
+
+    sum_rates = np.zeros(iters)
+    for x in range(Nexcl, iters):
+        sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
+    record_midProcess(sum_rates, requested_rates, params, run)
+
+    return
+    if (run % 100) == 0:
+        print('Run {} complete'.format(run))
+
+    return
+
+
+# use distance fac for plotting guidelines?
+def study_algorithm(NumUsers: int,
+                    params: dict) -> None:
+
+    # unpack params
+    iters, runs, dist_fac = params['iters'], params['runs'], params['dist_fac']
+    H_num, p_gen = params['H_num'], params['p_gen']
+    Nexcl = params['Nexcl']
+    NQs = int(bc(NumUsers, 2))
+
+    threshold = ((H_num * p_gen)
+                 // (1/10000)) / 10000  # Truncate at 4th place
+
+    trk_list = []
+
+    # Handle run 0 separately, set up trk_list
+    (queues,
+     requested_rates,
+     delivered_rates,
+     trk_list) = sim_QL_w_rate_feedback(NumUsers,
+                                        params,
+                                        trk_list,
+                                        0)
+    sum_rates = np.zeros(iters)
+    for x in range(Nexcl, iters):
+        sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
+    record_midProcess(sum_rates, requested_rates, params, 0)
+
+    # set up multiprocessing -- create pool of worker processes
+    num_cpus = min(multiprocessing.cpu_count(), 30)
+    mypool = multiprocessing.Pool(num_cpus)
+    # update fidelities
+    mypool.map(get_runAvrgs, [(params,
+                              trk_list,
+                              run) for run in range(1, runs)])
+
+    average_requests = np.zeros(iters)
+    rate_profile = np.zeros((int(bc(NumUsers, 2)), iters))
+
+    for run in range(runs):
+        dirName = '../DataOutput/{}'.format(params['timeStr']) + '/SR'
+        fileName = dirName + '/{}.txt'.format(run)
+        if os.path.isfile(fileName):
+            average_requests += np.loadtxt(fileName)
+        dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
+        fileName = dirName + '/{}.txt'.format(run)
+        if os.path.isfile(fileName):
+            rate_profile += np.loadtxt(fileName).reshape(NQs, iters)
+    average_requests *= (1 / runs)
+    rate_profile *= (1 / runs)
+
+    record_dataSets(average_requests,
+                    rate_profile,
+                    params)
+
+    p_whole = int(1000 * p_gen)
+    if params['param_change']:
+        tag = params['change_key']
+        fgnm = '../Figures/AlgAdjust/AvRequestRates_{}_{}_{}_{}_{}_{}'.format(
+                NumUsers, H_num, p_whole, runs, int(100 * dist_fac), tag)
+    else:
+        fgnm = '../Figures/AlgAdjust/AvRequestRates_{}_{}_{}_{}_{}'.format(
+                NumUsers, H_num, p_whole, runs, int(100 * dist_fac))
+
+    pltTotRts = False
+    if pltTotRts:
+        plot_total_rates(average_requests, NumUsers, params,
+                         trk_list, fgnm, False)
+
+    pltRtProfile = False
+    tag = 'UniformFixed'
+    if pltRtProfile:
+        plot_rate_profile(rate_profile[:, Nexcl:], NumUsers, H_num,
+                          p_gen, threshold,
+                          dist_fac, (iters - Nexcl),
+                          runs, False, tag)
+
+    record_trk_list(trk_list, params)
+
+    return
+
+
+def load_user_max_rates(NumUsers: int,
+                        p_gen: float,
+                        NQs: int,
+                        max_sched_per_q: int,
+                        keyword: str) -> list:
+    user_max_rates = [p_gen * max_sched_per_q] * NumUsers
+
+    if keyword == 'UniformVeryHigh':
+        user_max_rates = [((NQs - 1) / 2) * p_gen] * NumUsers
+    elif keyword == 'UniformSessionMax':
+        user_max_rates = [p_gen * max_sched_per_q] * NumUsers
+    elif keyword == 'NonUniformSessionMax':
+        first_partition = sample(range(NumUsers))
+        remains = list(range(NumUsers))
+        # random subset have max user = half max session
+        for x in first_partition:
+            user_max_rates[x] = (p_gen * max_sched_per_q) / 2
+            remains.pop(x)
+        # another random subset have max user  = 1.5 * max session
+        for x in sample(remains):
+            user_max_rates[x] = (p_gen * max_sched_per_q) * 1.5
+    return user_max_rates

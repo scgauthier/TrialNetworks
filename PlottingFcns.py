@@ -3,6 +3,79 @@ import matplotlib.pyplot as plt
 
 from scipy.special import binom as bc
 from typing import List
+# from icecream import ic
+
+
+def record_flex_dist_fac(timeString: str,
+                         params: dict,
+                         dist_fac: float) -> None:
+    dictName = '../DataOutput/{}'.format(timeString)
+    fileName = dictName + '/paramLog.txt'
+    # write number of users to param file
+    afile = open(fileName, 'a')
+    afile.write('Flex dist factor: {}\n'.format(dist_fac))
+    afile.close()
+    return
+
+
+def set_dist_fac(timeString: str) -> float:
+
+    # Load param dict from text file
+    dictName = '../DataOutput/{}'.format(timeString)
+    fileName = dictName + '/paramLog.txt'
+    params = {}
+    with open(fileName, 'r') as afile:
+        # linenum = 0
+        for line in afile.readlines():
+            # print(line)
+            try:
+                params['{}'.format(line.split(':')[0])
+                       ] = float(line.split(':')[1])
+            except ValueError:
+                params['{}'.format(line.split(':')[0])
+                       ] = line.split(':')[1]
+
+    # Read rates from text file
+    fileName = dictName + '/AvReq.txt'
+    rates = np.loadtxt(fileName)
+
+    # Read trk_list from text file
+    fileName = dictName + '/trkList.txt'
+    trk_list = np.loadtxt(fileName)
+
+    iters, changes = int(params['iters']), int(params['changes'])
+    indices = np.linspace(iters/changes, iters, changes)
+    spacing = int(indices[1] - indices[0])
+    buffDist = int(0.2 * spacing)
+
+    if params['param_change'][1:5] == 'True':
+        if params['change_key'][1:8] == 'ChangeH':
+            H_num, p_gen = int(params['H_num']), params['p_gen']
+            dist_fac = params['dist_fac']
+            thresholds = [((H_num * p_gen)
+                          // (1/10000)) / 10000]
+            for H in trk_list:
+                thresholds.append(((H * p_gen)
+                                  // (1/10000)) / 10000)
+
+    dist_fac = 0
+    for interval in range(1, changes):
+        maxPt = max(rates[
+                    (interval * spacing) + buffDist:((
+                     interval + 1) * spacing) - 1])
+        minPt = min(rates[
+                    (interval * spacing) + buffDist:((
+                     interval + 1) * spacing) - 1])
+
+        maxRelDist = abs((maxPt - thresholds[interval]) / thresholds[interval])
+        minRelDist = abs((minPt - thresholds[interval]) / thresholds[interval])
+
+        if (maxRelDist > dist_fac) or (minRelDist > dist_fac):
+            dist_fac = max(maxRelDist, minRelDist)
+
+    record_flex_dist_fac(timeString, params, dist_fac)
+
+    return dist_fac
 
 
 def plot_total_rates(rates: np.ndarray, NumUsers: int, params: dict,
@@ -99,6 +172,95 @@ def plot_total_rates(rates: np.ndarray, NumUsers: int, params: dict,
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
 
+def plot_TR_from_txt(timeString: str) -> None:
+
+    # Load param dict from text file
+    dictName = '../DataOutput/{}'.format(timeString)
+    fileName = dictName + '/paramLog.txt'
+    params = {}
+    with open(fileName, 'r') as afile:
+        # linenum = 0
+        for line in afile.readlines():
+            # print(line)
+            try:
+                params['{}'.format(line.split(':')[0])
+                       ] = float(line.split(':')[1])
+            except ValueError:
+                params['{}'.format(line.split(':')[0])
+                       ] = line.split(':')[1]
+
+    # Read rates from text file
+    fileName = dictName + '/AvReq.txt'
+    rates = np.loadtxt(fileName)
+
+    # Read trk_list from text file
+    fileName = dictName + '/trkList.txt'
+    trk_list = np.loadtxt(fileName)
+
+    # Start actual plotting
+    cmap = plt.cm.get_cmap('plasma')
+    inds = np.linspace(0, 0.85, 4)
+
+    iters = int(params['iters'])
+    plt.figure(figsize=(10, 8))
+    plt.plot(range(iters), rates, color=cmap(0),
+             label='Requested rates')
+    if params['param_change'][1:5] == 'True':
+        if params['change_key'][1:8] == 'ChangeH':
+            H_num, p_gen = int(params['H_num']), params['p_gen']
+            dist_fac = set_dist_fac(timeString)
+            thresholds = [((H_num * p_gen)
+                          // (1/10000)) / 10000]
+            for H in trk_list:
+                thresholds.append(((H * p_gen)
+                                  // (1/10000)) / 10000)
+            guidelines = []
+            upper_error = []
+            lower_error = []
+            tc = int(params['changes'])
+            for tick in range(tc):
+                guidelines += [thresholds[tick]] * int(iters / tc)
+                upper_error += [(1 + dist_fac
+                                 ) * thresholds[tick]] * int(iters / tc)
+                lower_error += [(1 - dist_fac
+                                 ) * thresholds[tick]] * int(iters / tc)
+            plt.plot(range(iters), guidelines, '--',
+                     color=cmap(inds[3]), label=r'$\lambda_{Switch}$')
+            plt.plot(range(iters), upper_error, '--',
+                     color=cmap(inds[2]),
+                     label=r'$(1 + \delta)\lambda_{Switch}$')
+            plt.plot(range(iters), lower_error, '--',
+                     color=cmap(inds[1]),
+                     label=r'$(1 - \delta)\lambda_{Switch}$')
+            plt.legend(fontsize=22, framealpha=0.6, loc=1)
+            plt.ylim(0.8 * min(thresholds), 1.2 * max(thresholds))
+
+    else:
+        H_num, p_gen = int(params['H_num']), params['p_gen']
+        threshold = ((H_num * p_gen)
+                     // (1/10000)) / 10000  # Truncate at 4th place
+        dist_fac = params['dist_fac']
+        plt.plot(range(iters), [(1 - dist_fac) * threshold] * iters, '--',
+                 color=cmap(inds[1]),
+                 label=r'$(1 -  \delta)\lambda_{Switch}$')
+        plt.plot(range(iters), [threshold] * iters, '--',
+                 color=cmap(inds[3]), label=r'$\lambda_{Switch}$')
+        plt.plot(range(iters), [(1 + dist_fac) * threshold] * iters, '--',
+                 color=cmap(inds[2]),
+                 label=r'$(1 +  \delta)\lambda_{Switch}$')
+        plt.legend(fontsize=22, framealpha=0.6, loc=4)
+        plt.ylim(0.5 * threshold, 1.5 * threshold)
+
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
+    plt.xlabel('t', fontsize=24)
+    plt.ylabel('Sum of rate requests', fontsize=24)
+
+    figName = dictName + '/AvReqRates'
+    plt.savefig(figName, dpi=300, bbox_inches='tight')
+
+    return
+
+
 def plot_rate_profile(all_rates: List[np.ndarray], params: dict,
                       fgnm: str, multiple: bool) -> None:
 
@@ -136,11 +298,50 @@ def plot_rate_profile(all_rates: List[np.ndarray], params: dict,
         for y in range(NQs):
             plt.plot(range(iters), all_rates[y, :], color=cmap(inds[y]),
                      label='s={}'.format(y))
-            plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
-            plt.xlabel('t', fontsize=24)
-            plt.ylabel('Session request rates', fontsize=24)
+        plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
+        plt.xlabel('t', fontsize=24)
+        plt.ylabel('Session request rates', fontsize=24)
 
-            plt.savefig(fgname, dpi=300, bbox_inches='tight')
+        plt.savefig(fgname, dpi=300, bbox_inches='tight')
+
+
+def plot_RP_from_txt(timeString: str) -> None:
+
+    # Load param dict from text file
+    dictName = '../DataOutput/{}'.format(timeString)
+    fileName = dictName + '/paramLog.txt'
+    params = {}
+    with open(fileName, 'r') as afile:
+        # linenum = 0
+        for line in afile.readlines():
+            # print(line)
+            try:
+                params['{}'.format(line.split(':')[0])
+                       ] = float(line.split(':')[1])
+            except ValueError:
+                params['{}'.format(line.split(':')[0])
+                       ] = line.split(':')[1]
+
+    NumUsers, iters = int(params['NumUsers']), int(params['iters'])
+
+    cmap = plt.cm.get_cmap('plasma')
+    NQs = int(bc(NumUsers, 2))
+    inds = np.linspace(0, 0.95, NQs)
+
+    # Read rates from text file
+    fileName = dictName + '/RtProf.txt'
+    all_rates = np.loadtxt(fileName).reshape((NQs, iters))
+
+    plt.figure(figsize=(10, 8))
+    for y in range(NQs):
+        plt.plot(range(iters), all_rates[y, :], color=cmap(inds[y]),
+                 label='s={}'.format(y))
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
+    plt.xlabel('t', fontsize=24)
+    plt.ylabel('Session request rates', fontsize=24)
+
+    figName = dictName + '/RateProfile'
+    plt.savefig(figName, dpi=300, bbox_inches='tight')
 
 
 def plot_delivery_rates(moving_avrgs: np.ndarray, avrg_delivered: list,
