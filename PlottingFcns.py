@@ -233,7 +233,8 @@ def plot_TR_from_txt(timeString: str) -> None:
                      color=cmap(inds[1]),
                      label=r'$(1 - \delta)\lambda_{Switch}$')
             plt.legend(fontsize=22, framealpha=0.6, loc=1)
-            plt.ylim(0.8 * min(thresholds), 1.2 * max(thresholds))
+            plt.ylim(max(min(thresholds) * (1 - (4 * dist_fac)), 0),
+                     max(thresholds) * (1 + (4 * dist_fac)))
 
     else:
         H_num, p_gen = int(params['H_num']), params['p_gen']
@@ -389,3 +390,6 @@ def plot_delivery_rates(moving_avrgs: np.ndarray, avrg_delivered: list,
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
     return
+
+
+plot_TR_from_txt('20221102-143405')
