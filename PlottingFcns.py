@@ -390,6 +390,3 @@ def plot_delivery_rates(moving_avrgs: np.ndarray, avrg_delivered: list,
     plt.savefig(figname, dpi=300, bbox_inches='tight')
 
     return
-
-
-plot_TR_from_txt('20221102-143405')
