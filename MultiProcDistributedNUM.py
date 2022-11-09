@@ -1,4 +1,5 @@
 import os
+import shutil
 import multiprocessing
 import numpy as np
 from scipy.special import binom as bc
@@ -507,6 +508,12 @@ def study_algorithm(NumUsers: int,
             rate_profile += np.loadtxt(fileName).reshape(NQs, iters)
     average_requests *= (1 / runs)
     rate_profile *= (1 / runs)
+
+    # Remove un-needed intermediaries (clear up space)
+    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/SR'
+    shutil.rmtree(dirName, ignore_errors=True)
+    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
+    shutil.rmtree(dirName, ignore_errors=True)
 
     record_dataSets(average_requests,
                     rate_profile,
