@@ -401,15 +401,15 @@ def record_midProcess(sum_rates: np.ndarray,
         np.savetxt(afile, sum_rates)
         afile.close()
 
-    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
-    if not os.path.isdir(dirName):
-        os.mkdir(dirName)
-    fileName = dirName + '/{}.txt'.format(run)
-    if not os.path.isfile(fileName):
-        afile = open(fileName, 'w')
-        for row in rate_requests:
-            np.savetxt(afile, row)
-        afile.close()
+    # dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
+    # if not os.path.isdir(dirName):
+    #     os.mkdir(dirName)
+    # fileName = dirName + '/{}.txt'.format(run)
+    # if not os.path.isfile(fileName):
+    #     afile = open(fileName, 'w')
+    #     for row in rate_requests:
+    #         np.savetxt(afile, row)
+    #     afile.close()
 
 
 def record_dataSets(average_requests: np.ndarray,
@@ -427,6 +427,18 @@ def record_dataSets(average_requests: np.ndarray,
         afile = open(fileName, 'w')
         for row in rate_profile:
             np.savetxt(afile, row)
+        afile.close()
+
+    return
+
+
+def record_AvDataSet(average_requests: np.ndarray,
+                     params: dict) -> None:
+
+    fileName = '../DataOutput/{}'.format(params['timeStr']) + '/AvReq.txt'
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        np.savetxt(afile, average_requests)
         afile.close()
 
     return
@@ -495,29 +507,31 @@ def study_algorithm(NumUsers: int,
                               run) for run in range(1, runs)])
 
     average_requests = np.zeros(iters)
-    rate_profile = np.zeros((int(bc(NumUsers, 2)), iters))
+    # rate_profile = np.zeros((int(bc(NumUsers, 2)), iters))
 
     for run in range(runs):
         dirName = '../DataOutput/{}'.format(params['timeStr']) + '/SR'
         fileName = dirName + '/{}.txt'.format(run)
         if os.path.isfile(fileName):
             average_requests += np.loadtxt(fileName)
-        dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
-        fileName = dirName + '/{}.txt'.format(run)
-        if os.path.isfile(fileName):
-            rate_profile += np.loadtxt(fileName).reshape(NQs, iters)
+        # dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
+        # fileName = dirName + '/{}.txt'.format(run)
+        # if os.path.isfile(fileName):
+        #     rate_profile += np.loadtxt(fileName).reshape(NQs, iters)
     average_requests *= (1 / runs)
-    rate_profile *= (1 / runs)
+    # rate_profile *= (1 / runs)
 
     # Remove un-needed intermediaries (clear up space)
     dirName = '../DataOutput/{}'.format(params['timeStr']) + '/SR'
     shutil.rmtree(dirName, ignore_errors=True)
-    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
-    shutil.rmtree(dirName, ignore_errors=True)
+    # dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
+    # shutil.rmtree(dirName, ignore_errors=True)
 
-    record_dataSets(average_requests,
-                    rate_profile,
-                    params)
+    # record_dataSets(average_requests,
+    #                 rate_profile,
+    #                 params)
+    record_AvDataSet(average_requests,
+                     params)
 
     p_whole = int(1000 * p_gen)
     if params['param_change']:
