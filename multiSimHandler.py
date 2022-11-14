@@ -5,6 +5,16 @@ from scipy.special import binom as bc
 from MultiProcDistributedNUM import record_NumUsers, study_algorithm
 
 
+def round_down(NumUsers: int) -> int:
+    if NumUsers < 10:
+        return 1
+    else:
+        for x in range(6):
+            rDown = round((NumUsers - x), -1)
+            if rDown <= NumUsers:
+                return rDown
+
+
 def load_params(NumUsers: int) -> dict:
 
     iters = 10000
@@ -32,7 +42,7 @@ def load_params(NumUsers: int) -> dict:
 
     session_min_rates = [p_gen / global_scale] * NQs
     step_size = 1
-    central_scale = round(NumUsers, -1) / lambda_Switch
+    central_scale = round_down(NumUsers) / lambda_Switch
 
     param_change = True
 
