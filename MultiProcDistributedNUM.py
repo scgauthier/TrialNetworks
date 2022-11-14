@@ -478,7 +478,7 @@ def study_algorithm(NumUsers: int,
     iters, runs, dist_fac = params['iters'], params['runs'], params['dist_fac']
     H_num, p_gen = params['H_num'], params['p_gen']
     Nexcl = params['Nexcl']
-    NQs = int(bc(NumUsers, 2))
+    # NQs = int(bc(NumUsers, 2))
 
     threshold = ((H_num * p_gen)
                  // (1/10000)) / 10000  # Truncate at 4th place
