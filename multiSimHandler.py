@@ -41,8 +41,8 @@ def load_params(NumUsers: int) -> dict:
     # user_max_rates = [NQs] * NQs
 
     session_min_rates = [p_gen / global_scale] * NQs
-    step_size = 1
-    central_scale = round_down(NumUsers) / lambda_Switch
+    step_size = round_down(NumUsers)
+    central_scale = 1 / lambda_Switch
 
     param_change = True
 
