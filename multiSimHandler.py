@@ -1,6 +1,8 @@
 import os
 import time
 import numpy as np
+from math import log10 as lg
+from math import floor
 from scipy.special import binom as bc
 from MultiProcDistributedNUM import record_NumUsers, study_algorithm
 
@@ -41,8 +43,11 @@ def load_params(NumUsers: int) -> dict:
     # user_max_rates = [NQs] * NQs
 
     session_min_rates = [p_gen / global_scale] * NQs
-    step_size = round_down(NumUsers)
-    central_scale = 1 / lambda_Switch
+    # step_size = round_down(NumUsers)
+    step_size = 1
+    # central_scale = 1 / lambda_Switch
+    # Scale by rounded down power of 10 of users
+    central_scale = 10**(floor(lg(NumUsers))) / lambda_Switch
 
     param_change = True
 
