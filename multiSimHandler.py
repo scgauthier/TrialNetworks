@@ -42,12 +42,11 @@ def load_params(NumUsers: int) -> dict:
     # user_max_rates = [NQs] * NQs
 
     session_min_rates = [p_gen / global_scale] * NQs
-    # step_size = round_down(NumUsers) / (1 + lg(NumUsers))
-    step_size = 1
-    # central_scale = 1 / lambda_Switch
+    step_size = round_down(NumUsers) / (1 + lg(NumUsers))
+    # step_size = 1
     # Scale increase slightly with Number of users
-    # central_scale = (1 + lg(NumUsers)) / lambda_Switch
-    user_scale_factor = lg(NumUsers)
+    user_scale_factor = 1 + lg(NumUsers)
+    # user_scale_factor = lg(NumUsers)
     central_scale = user_scale_factor / lambda_Switch
 
     param_change = True
