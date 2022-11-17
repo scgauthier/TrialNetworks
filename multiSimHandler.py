@@ -2,7 +2,7 @@ import os
 import time
 import numpy as np
 from math import log10 as lg
-from math import floor
+# from math import floor
 from scipy.special import binom as bc
 from MultiProcDistributedNUM import record_NumUsers, study_algorithm
 
@@ -93,7 +93,7 @@ def load_params(NumUsers: int) -> dict:
 
 
 if __name__ == '__main__':
-    NumUsers = 6
+    NumUsers = 20
     params = load_params(NumUsers)
     record_NumUsers(NumUsers, params)
 
