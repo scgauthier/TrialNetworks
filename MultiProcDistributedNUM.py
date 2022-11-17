@@ -475,7 +475,7 @@ def study_algorithm(NumUsers: int,
                     params: dict) -> None:
 
     # unpack params
-    iters, runs, dist_fac = params['iters'], params['runs'], params['dist_fac']
+    iters, runs = params['iters'], params['runs']
     H_num, p_gen = params['H_num'], params['p_gen']
     Nexcl = params['Nexcl']
     # NQs = int(bc(NumUsers, 2))
@@ -533,27 +533,13 @@ def study_algorithm(NumUsers: int,
     record_AvDataSet(average_requests,
                      params)
 
-    p_whole = int(1000 * p_gen)
-    if params['param_change']:
-        tag = params['change_key']
-        fgnm = '../Figures/AlgAdjust/AvRequestRates_{}_{}_{}_{}_{}_{}'.format(
-                NumUsers, H_num, p_whole, runs, int(100 * dist_fac), tag)
-    else:
-        fgnm = '../Figures/AlgAdjust/AvRequestRates_{}_{}_{}_{}_{}'.format(
-                NumUsers, H_num, p_whole, runs, int(100 * dist_fac))
+    dirName = '../DataOutput/{}'.format(params['timeStr'])
+    fgnm = dirName + '/AvReq.txt'
 
     pltTotRts = False
     if pltTotRts:
         plot_total_rates(average_requests, NumUsers, params,
                          trk_list, fgnm, False)
-
-    pltRtProfile = False
-    tag = 'UniformFixed'
-    if pltRtProfile:
-        plot_rate_profile(rate_profile[:, Nexcl:], NumUsers, H_num,
-                          p_gen, threshold,
-                          dist_fac, (iters - Nexcl),
-                          runs, False, tag)
 
     record_trk_list(trk_list, params)
 

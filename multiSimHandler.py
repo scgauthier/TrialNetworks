@@ -21,7 +21,6 @@ def load_params(NumUsers: int) -> dict:
 
     iters = 10000
     runs = 1000
-    dist_fac = 0.02
 
     Nexcl = 0
 
@@ -71,7 +70,6 @@ def load_params(NumUsers: int) -> dict:
         'indices': indices,
         'iters': iters,
         'runs': runs,
-        'dist_fac': dist_fac,
         'Nexcl': Nexcl,
         'changes': changes,
         'timeStr': time.strftime("%Y%m%d-%H%M%S")
@@ -101,5 +99,5 @@ if __name__ == '__main__':
     # study_balance_near_threshold(NumUsers, H_num, user_max_rates,
     #                              session_min_rates, step_size,
     #                              p_gen, max_sched_per_q,
-    #                              iters, dist_fac)
+    #                              iters)
     study_algorithm(NumUsers, params)
