@@ -19,7 +19,7 @@ def round_down(NumUsers: int) -> int:
 
 def load_params(NumUsers: int) -> dict:
 
-    iters = 10000
+    iters = 100000
     runs = 1000
 
     Nexcl = 0
@@ -42,8 +42,8 @@ def load_params(NumUsers: int) -> dict:
     # user_max_rates = [NQs] * NQs
 
     session_min_rates = [p_gen / global_scale] * NQs
-    step_size = round_down(NumUsers) / (1 + lg(NumUsers))
-    # step_size = 1
+    # step_size = round_down(NumUsers) / (1 + lg(NumUsers))
+    step_size = 1
     # Scale increase slightly with Number of users
     user_scale_factor = 1 + lg(NumUsers)
     # user_scale_factor = lg(NumUsers)
