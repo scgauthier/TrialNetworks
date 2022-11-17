@@ -47,7 +47,8 @@ def load_params(NumUsers: int) -> dict:
     # central_scale = 1 / lambda_Switch
     # Scale increase slightly with Number of users
     # central_scale = (1 + lg(NumUsers)) / lambda_Switch
-    central_scale = lg(NumUsers) / lambda_Switch
+    user_scale_factor = lg(NumUsers)
+    central_scale = user_scale_factor / lambda_Switch
 
     param_change = True
 
@@ -64,6 +65,7 @@ def load_params(NumUsers: int) -> dict:
         'user_max_rates': user_max_rates,
         'session_min_rates': session_min_rates,
         'step_size': step_size,
+        'user_scale_factor': user_scale_factor,
         'central_scale': central_scale,
         'param_change': param_change,
         'change_key': change_key,

@@ -219,6 +219,8 @@ def sim_QL_w_rate_feedback(NumUsers: int,
 
                 if (change_key == 'ChangeH') and (x in loc_params['indices']):
 
+                    user_scale_factor = params['user_scale_factor']
+
                     if run > 0:
                         eval = np.where(loc_params['indices'] == x)[0][0]
                         loc_params['H_num'] = trk_list[eval]
@@ -230,7 +232,7 @@ def sim_QL_w_rate_feedback(NumUsers: int,
                     H_num = loc_params['H_num']
                     threshold = ((H_num * p_gen)
                                  // (1/10000)) / 10000  # Truncate at 4th place
-                    loc_params['central_scale'] = 1 / threshold
+                    loc_params['central_scale'] = user_scale_factor / threshold
 
             # based on prices, sources update rates
             price_vector = update_prices(NumUsers, userSessions,
@@ -464,10 +466,6 @@ def get_runAvrgs(param_tuple: tuple) -> Tuple[np.ndarray, np.ndarray]:
     record_midProcess(sum_rates, requested_rates, params, run)
 
     return
-    if (run % 100) == 0:
-        print('Run {} complete'.format(run))
-
-    return
 
 
 # use distance fac for plotting guidelines?
@@ -479,9 +477,6 @@ def study_algorithm(NumUsers: int,
     H_num, p_gen = params['H_num'], params['p_gen']
     Nexcl = params['Nexcl']
     # NQs = int(bc(NumUsers, 2))
-
-    threshold = ((H_num * p_gen)
-                 // (1/10000)) / 10000  # Truncate at 4th place
 
     trk_list = []
 
