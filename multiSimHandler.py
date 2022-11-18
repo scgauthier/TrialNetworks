@@ -45,7 +45,7 @@ def load_params(NumUsers: int) -> dict:
     # step_size = round_down(NumUsers) / (1 + lg(NumUsers))
     step_size = 1
     # Scale increase slightly with Number of users
-    user_scale_factor = 1 + lg(NumUsers)
+    user_scale_factor = lg(NumUsers)
     # user_scale_factor = lg(NumUsers)
     central_scale = user_scale_factor / lambda_Switch
 
