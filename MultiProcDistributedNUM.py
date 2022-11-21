@@ -5,6 +5,7 @@ import numpy as np
 from scipy.special import binom as bc
 from typing import Tuple
 from random import random, sample
+from math import floor
 
 from ToySwitch import gen_arrivals, model_probabilistic_link_gen
 from ToySwitch import flexible_schedule
@@ -104,11 +105,11 @@ def update_prices(NumUsers: int, userSessions: np.ndarray,
         p_u = 0
         for session in userSessions[u]:
             # each user price is sum over queue lengths from their sessions
-            # probably needs to be replaced also
+            # plus difference in sum of their session rates from user max
             p_u += (lastT_queue_lengths[int(session - 1)]
                     + lastT_rates[int(session - 1)])
         p_u -= user_max_rates[u]
-        # Scaling of price, currently by 1/lambda*_u
+        # Scaling of price, currently by 1/bar{lambda_u}
         p_u = p_u / user_max_rates[u]
         price_vector.append(max(p_u, 0))
 
@@ -474,7 +475,6 @@ def study_algorithm(NumUsers: int,
 
     # unpack params
     iters, runs = params['iters'], params['runs']
-    H_num, p_gen = params['H_num'], params['p_gen']
     Nexcl = params['Nexcl']
     # NQs = int(bc(NumUsers, 2))
 
@@ -548,18 +548,23 @@ def load_user_max_rates(NumUsers: int,
                         keyword: str) -> list:
     user_max_rates = [p_gen * max_sched_per_q] * NumUsers
 
-    if keyword == 'UniformVeryHigh':
+    if keyword == 'uniformVeryHigh':
         user_max_rates = [((NQs - 1) / 2) * p_gen] * NumUsers
-    elif keyword == 'UniformSessionMax':
+    elif keyword == 'uniformSessionMax':
         user_max_rates = [p_gen * max_sched_per_q] * NumUsers
-    elif keyword == 'NonUniformSessionMax':
-        first_partition = sample(range(NumUsers))
+    elif keyword == 'singleNonUniformSessionMax':
+        first_partition = sample(range(NumUsers), floor(NumUsers / 4))
+        # random N/4 subset has max user = half max session
+        for x in first_partition:
+            user_max_rates[x] = (p_gen * max_sched_per_q) / 2
+    elif keyword == 'doubleNonUniformSessionMax':
+        first_partition = sample(range(NumUsers), floor(NumUsers / 4))
         remains = list(range(NumUsers))
         # random subset have max user = half max session
         for x in first_partition:
             user_max_rates[x] = (p_gen * max_sched_per_q) / 2
             remains.pop(x)
         # another random subset have max user  = 1.5 * max session
-        for x in sample(remains):
+        for x in sample(remains, floor(NumUsers / 4)):
             user_max_rates[x] = (p_gen * max_sched_per_q) * 1.5
     return user_max_rates

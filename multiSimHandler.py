@@ -5,6 +5,7 @@ from math import log10 as lg
 # from math import floor
 from scipy.special import binom as bc
 from MultiProcDistributedNUM import record_NumUsers, study_algorithm
+from MultiProcDistributedNUM import load_user_max_rates
 
 
 def round_down(NumUsers: int) -> int:
@@ -31,16 +32,15 @@ def load_params(NumUsers: int) -> dict:
     lambda_Switch = H_num * p_gen
     NQs = int(bc(NumUsers, 2))
 
-    # Should relate to timescale of system
-    # One node can be involved in N-1 sessions
-    # per session a mx of p_gen ent generated per slot
-    # maybe a user can deal with max of ((NQs - 1) / 2) * p_gen pair generated
-    # per slot, as example where user cutoffs are actually relevant
-    user_max_rates = [((NQs - 1) / 2) * p_gen] * NumUsers
-    # user_max_rates = [lambda_Switch] * NumUsers
-    # try user_max_rates set to NQs for case when they are not relevant
-    # user_max_rates = [NQs] * NQs
-
+    # possible keywords:
+    # 1. uniformVeryHigh
+    # 2. uniformSessionMax
+    # 3. singleNonUniformSessionMax
+    # 4. doubleNonUniformSessionMax
+    user_max_rates = load_user_max_rates(NumUsers,
+                                         p_gen, NQs,
+                                         max_sched_per_q,
+                                         'uniformVeryHigh')
     session_min_rates = [p_gen / global_scale] * NQs
     # step_size = round_down(NumUsers) / (1 + lg(NumUsers))
     step_size = 1
