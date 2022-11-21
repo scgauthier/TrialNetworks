@@ -51,7 +51,7 @@ def set_dist_fac(timeString: str) -> float:
     if params['param_change'][1:5] == 'True':
         if params['change_key'][1:8] == 'ChangeH':
             H_num, p_gen = int(params['H_num']), params['p_gen']
-            dist_fac = params['dist_fac']
+            # dist_fac = params['dist_fac']
             thresholds = [((H_num * p_gen)
                           // (1/10000)) / 10000]
             for H in trk_list:
@@ -183,6 +183,7 @@ def plot_TR_from_txt(timeString: str) -> None:
         for line in afile.readlines():
             # print(line)
             try:
+                # print(line.split(':')[0])
                 params['{}'.format(line.split(':')[0])
                        ] = float(line.split(':')[1])
             except ValueError:
