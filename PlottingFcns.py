@@ -39,16 +39,17 @@ def set_dist_fac(timeString: str) -> float:
     fileName = dictName + '/AvReq.txt'
     rates = np.loadtxt(fileName)
 
-    # Read trk_list from text file
-    fileName = dictName + '/trkList.txt'
-    trk_list = np.loadtxt(fileName)
-
-    iters, changes = int(params['iters']), int(params['changes'])
-    indices = np.linspace(iters/changes, iters, changes)
-    spacing = int(indices[1] - indices[0])
-    buffDist = int(0.2 * spacing)
-
     if params['param_change'][1:5] == 'True':
+
+        # Read trk_list from text file
+        fileName = dictName + '/trkList.txt'
+        trk_list = np.loadtxt(fileName)
+
+        iters, changes = int(params['iters']), int(params['changes'])
+        indices = np.linspace(iters/changes, iters, changes)
+        spacing = int(indices[1] - indices[0])
+        buffDist = int(0.2 * spacing)
+
         if params['change_key'][1:8] == 'ChangeH':
             H_num, p_gen = int(params['H_num']), params['p_gen']
             # dist_fac = params['dist_fac']
@@ -58,17 +59,38 @@ def set_dist_fac(timeString: str) -> float:
                 thresholds.append(((H * p_gen)
                                   // (1/10000)) / 10000)
 
-    dist_fac = 0
-    for interval in range(1, changes):
-        maxPt = max(rates[
-                    (interval * spacing) + buffDist:((
-                     interval + 1) * spacing) - 1])
-        minPt = min(rates[
-                    (interval * spacing) + buffDist:((
-                     interval + 1) * spacing) - 1])
+        dist_fac = 0
+        for interval in range(1, changes):
+            maxPt = max(rates[
+                        (interval * spacing) + buffDist:((
+                         interval + 1) * spacing) - 1])
+            minPt = min(rates[
+                        (interval * spacing) + buffDist:((
+                         interval + 1) * spacing) - 1])
 
-        maxRelDist = abs((maxPt - thresholds[interval]) / thresholds[interval])
-        minRelDist = abs((minPt - thresholds[interval]) / thresholds[interval])
+            maxRelDist = abs((maxPt - thresholds[interval])
+                             / thresholds[interval])
+            minRelDist = abs((minPt - thresholds[interval])
+                             / thresholds[interval])
+
+            if (maxRelDist > dist_fac) or (minRelDist > dist_fac):
+                dist_fac = max(maxRelDist, minRelDist)
+
+    else:
+        iters = int(params['iters'])
+        H_num, p_gen = int(params['H_num']), params['p_gen']
+        # dist_fac = params['dist_fac']
+        threshold = ((H_num * p_gen)
+                     // (1/10000)) / 10000
+        buffDist = int(0.2 * (iters / 10))
+        dist_fac = 0
+        maxPt = max(rates[buffDist:])
+        minPt = min(rates[buffDist:])
+
+        maxRelDist = abs((maxPt - threshold)
+                         / threshold)
+        minRelDist = abs((minPt - threshold)
+                         / threshold)
 
         if (maxRelDist > dist_fac) or (minRelDist > dist_fac):
             dist_fac = max(maxRelDist, minRelDist)
@@ -206,12 +228,14 @@ def plot_TR_from_txt(timeString: str) -> None:
     plt.figure(figsize=(10, 8))
     plt.plot(range(iters), rates, color=cmap(0),
              label='Requested rates')
+
+    H_num, p_gen = int(params['H_num']), params['p_gen']
+    dist_fac = set_dist_fac(timeString)
+    thresholds = [((H_num * p_gen)
+                  // (1/10000)) / 10000]
+
     if params['param_change'][1:5] == 'True':
         if params['change_key'][1:8] == 'ChangeH':
-            H_num, p_gen = int(params['H_num']), params['p_gen']
-            dist_fac = set_dist_fac(timeString)
-            thresholds = [((H_num * p_gen)
-                          // (1/10000)) / 10000]
             for H in trk_list:
                 thresholds.append(((H * p_gen)
                                   // (1/10000)) / 10000)
@@ -238,10 +262,7 @@ def plot_TR_from_txt(timeString: str) -> None:
                      max(thresholds) * (1 + (4 * dist_fac)))
 
     else:
-        H_num, p_gen = int(params['H_num']), params['p_gen']
-        threshold = ((H_num * p_gen)
-                     // (1/10000)) / 10000  # Truncate at 4th place
-        dist_fac = params['dist_fac']
+        threshold = thresholds[0]
         plt.plot(range(iters), [(1 - dist_fac) * threshold] * iters, '--',
                  color=cmap(inds[1]),
                  label=r'$(1 -  \delta)\lambda_{Switch}$')
@@ -251,7 +272,8 @@ def plot_TR_from_txt(timeString: str) -> None:
                  color=cmap(inds[2]),
                  label=r'$(1 +  \delta)\lambda_{Switch}$')
         plt.legend(fontsize=22, framealpha=0.6, loc=4)
-        plt.ylim(0.5 * threshold, 1.5 * threshold)
+        plt.ylim(max(min(thresholds) * (1 - (4 * dist_fac)), 0),
+                 max(thresholds) * (1 + (4 * dist_fac)))
 
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
     plt.xlabel('t', fontsize=24)
