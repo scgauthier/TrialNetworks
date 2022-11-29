@@ -82,7 +82,7 @@ def set_dist_fac(timeString: str) -> float:
         # dist_fac = params['dist_fac']
         threshold = ((H_num * p_gen)
                      // (1/10000)) / 10000
-        buffDist = int(0.2 * (iters / 10))
+        buffDist = int(1.0 * (iters / 10))
         dist_fac = 0
         maxPt = max(rates[buffDist:])
         minPt = min(rates[buffDist:])
@@ -216,10 +216,6 @@ def plot_TR_from_txt(timeString: str) -> None:
     fileName = dictName + '/AvReq.txt'
     rates = np.loadtxt(fileName)
 
-    # Read trk_list from text file
-    fileName = dictName + '/trkList.txt'
-    trk_list = np.loadtxt(fileName)
-
     # Start actual plotting
     cmap = plt.cm.get_cmap('plasma')
     inds = np.linspace(0, 0.85, 4)
@@ -235,6 +231,10 @@ def plot_TR_from_txt(timeString: str) -> None:
                   // (1/10000)) / 10000]
 
     if params['param_change'][1:5] == 'True':
+        # Read trk_list from text file
+        fileName = dictName + '/trkList.txt'
+        trk_list = np.loadtxt(fileName)
+
         if params['change_key'][1:8] == 'ChangeH':
             for H in trk_list:
                 thresholds.append(((H * p_gen)

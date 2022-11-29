@@ -1,11 +1,11 @@
 import numpy as np
-from math import floor
+from math import floor, ceil
 import matplotlib.pyplot as plt
 from scipy.special import binom as bc
 from scipy.stats import binom
 from random import random, shuffle
-from typing import Tuple, List
-from itertools import combinations, combinations_with_replacement
+from typing import Tuple
+# from itertools import combinations, combinations_with_replacement
 from matplotlib import rc
 
 rc('text', usetex=True)
@@ -57,9 +57,10 @@ def prep_dist(NumUsers: int, H_num: int,
 # Probability of each request submission
 # for queue i is p_i.
 def gen_arrivals(NumUsers: int,
-                 probs: list) -> np.ndarray:
+                 probs: list,
+                 params: dict) -> np.ndarray:
 
-    NQs = int(bc(NumUsers, 2))
+    NQs = ceil(int(bc(NumUsers, 2)) * params['sessionSamples'])
     arrivals = np.zeros(NQs)
 
     for x in range(NQs):
@@ -88,6 +89,7 @@ def flexible_schedule(H_num: int,
     max_lengths = np.zeros(NQs)
 
     # for making tie breaking random in argpartition
+    # at paired up level, could insert np.non-zero here on QLs
     paired_up = []
     for x in range(NQs):
         paired_up.append((QLs[x], x))
@@ -153,10 +155,12 @@ def weighted_flex_schedule(H_num: int, NQs: int,
     return max_lengths
 
 
-def model_probabilistic_link_gen(NumUsers: int, gen_prob: float,
+def model_probabilistic_link_gen(NumUsers: int,
+                                 gen_prob: float,
+                                 params: dict,
                                  schedule: np.ndarray) -> list:
     new_schedule = np.copy(schedule)
-    for x in range(int(bc(NumUsers, 2))):
+    for x in range(ceil(int(bc(NumUsers, 2)) * params['sessionSamples'])):
         if schedule[x] != 0:
             for y in range(int(schedule[x])):  # accomodate flexible scheduling
                 if random() > gen_prob:

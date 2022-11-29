@@ -5,7 +5,7 @@ import numpy as np
 from scipy.special import binom as bc
 from typing import Tuple
 from random import random, sample
-from math import floor
+from math import floor, ceil
 
 from ToySwitch import gen_arrivals, model_probabilistic_link_gen
 from ToySwitch import flexible_schedule
@@ -70,14 +70,24 @@ def session_id_to_users(NumUsers: int, session_id: int) -> list:
 
 # takes as input the total number of sessions
 # Outputs a list of lists, ordered by user number, of S(u) for each u.
-def partition_sessions_by_user(NumUsers: int, NQs: int) -> np.ndarray:
+def partition_sessions_by_user(NumUsers: int,
+                               NQs: int,
+                               sessionMap: np.ndarray) -> np.ndarray:
 
     userSessions = np.zeros((NumUsers, NumUsers - 1))
     for x in range(NQs):
         min_entries = np.argmin(userSessions, axis=1)
-        user_pair = session_id_to_users(NumUsers, x + 1)
-        for u in user_pair:
-            userSessions[u, min_entries[u]] = x + 1
+        try:
+            user_pair = session_id_to_users(NumUsers,
+                                            int(sessionMap[x]) + 1)
+        except IndexError:
+            user_pair = session_id_to_users(NumUsers,
+                                            int(sessionMap + 1))
+        try:
+            for u in user_pair:
+                userSessions[u, min_entries[u]] = int(sessionMap[x]) + 1
+        except IndexError:
+            userSessions[u, min_entries[u]] = int(sessionMap) + 1
 
     return userSessions
 
@@ -86,6 +96,7 @@ def update_prices(NumUsers: int, userSessions: np.ndarray,
                   lambda_Switch: float, user_max_rates: list,
                   step_size: float,
                   central_scale: float,
+                  sessionMap: np.ndarray,
                   lastT_queue_lengths: np.ndarray,
                   lastT_rates: np.ndarray) -> list:
 
@@ -104,10 +115,16 @@ def update_prices(NumUsers: int, userSessions: np.ndarray,
     for u in range(NumUsers):
         p_u = 0
         for session in userSessions[u]:
-            # each user price is sum over queue lengths from their sessions
-            # plus difference in sum of their session rates from user max
-            p_u += (lastT_queue_lengths[int(session - 1)]
-                    + lastT_rates[int(session - 1)])
+            if session > 0:
+                try:
+                    mappedSession = int(np.where(
+                                        sessionMap == (session - 1))[0][0])
+                except IndexError:
+                    mappedSession = int(sessionMap)
+                # each user price is sum over queue lengths from their sessions
+                # plus difference in sum of their session rates from user max
+                p_u += (lastT_queue_lengths[int(mappedSession)]
+                        + lastT_rates[int(mappedSession)])
         p_u -= user_max_rates[u]
         # Scaling of price, currently by 1/bar{lambda_u}
         p_u = p_u / user_max_rates[u]
@@ -120,12 +137,17 @@ def update_prices(NumUsers: int, userSessions: np.ndarray,
 # this performs gradient projection
 def update_rates(NumUsers: int, NQs: int,
                  price_vector: list,
+                 sessionMap: np.ndarray,
                  session_min_rates: list,
                  session_max_rates: list) -> list:
 
     rates = []
     for s in range(NQs):
-        user_pair = session_id_to_users(NumUsers, s + 1)
+        try:
+            mappedSession = int(sessionMap[s])
+        except IndexError:
+            mappedSession = int(sessionMap)
+        user_pair = session_id_to_users(NumUsers, mappedSession + 1)
 
         p_us = 0
         for u in user_pair:
@@ -184,29 +206,31 @@ def sim_QL_w_rate_feedback(NumUsers: int,
     threshold = ((H_num * p_gen)
                  // (1/10000)) / 10000  # Truncate at 4th place
 
-    NQs = int(bc(NumUsers, 2))
+    fileName = '../DataOutput/{}'.format(params['timeStr']) + '/SeshMap.txt'
+    NQs = ceil(int(bc(NumUsers, 2)) * params['sessionSamples'])
+    sessionMap = np.loadtxt(fileName)
     queue_lengths = np.zeros((NQs, iters))
     rate_track = np.zeros((NQs, iters))
     delivered = np.zeros((NQs, iters))
     schedule = np.zeros(NQs)
 
     # record user sessions
-    userSessions = partition_sessions_by_user(NumUsers, NQs)
+    userSessions = partition_sessions_by_user(NumUsers, NQs, sessionMap)
     # session max rates
     session_max_rates = [max_sched_per_q * p_gen] * NQs
     # initial price vector (zero for empty queues)
     price_vector = [0] * (1 + NumUsers)
 
     # set initial requests
-    rates = update_rates(NumUsers, NQs, price_vector, session_min_rates,
-                         session_max_rates)
+    rates = update_rates(NumUsers, NQs, price_vector, sessionMap,
+                         session_min_rates, session_max_rates)
 
     rate_track[:, 0] = rates
 
     for x in range(iters):
 
         # Get submitted requests
-        arrivals = gen_arrivals(NumUsers, rates)
+        arrivals = gen_arrivals(NumUsers, rates, params)
 
         # if (x == 0) and (run == 0):
         #     trk_list.append(H_num)
@@ -240,9 +264,10 @@ def sim_QL_w_rate_feedback(NumUsers: int,
                                          threshold, user_max_rates,
                                          step_size,
                                          loc_params['central_scale'],
+                                         sessionMap,
                                          queue_lengths[:, x - 1],
                                          rate_track[:, x - 1])
-            rates = update_rates(NumUsers, NQs, price_vector,
+            rates = update_rates(NumUsers, NQs, price_vector, sessionMap,
                                  session_min_rates, session_max_rates)
 
             rate_track[:, x] = rates
@@ -250,6 +275,7 @@ def sim_QL_w_rate_feedback(NumUsers: int,
             # for current schedule, do link gen
             schedule = model_probabilistic_link_gen(NumUsers,
                                                     p_gen,
+                                                    params,
                                                     schedule)
 
             # track delivery of entangled pairs to sessions
@@ -447,6 +473,20 @@ def record_AvDataSet(average_requests: np.ndarray,
     return
 
 
+def record_session_map(NumUsers: int, params: dict) -> None:
+
+    NQs = int(bc(NumUsers, 2))
+    nSamples = ceil(params['sessionSamples'] * NQs)
+    session_map = sample(range(NQs), nSamples)
+    fileName = '../DataOutput/{}'.format(params['timeStr']) + '/SeshMap.txt'
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        np.savetxt(afile, session_map)
+        afile.close()
+
+    return
+
+
 def get_runAvrgs(param_tuple: tuple) -> Tuple[np.ndarray, np.ndarray]:
 
     params, trk_list, run = param_tuple
@@ -479,6 +519,7 @@ def study_algorithm(NumUsers: int,
     # NQs = int(bc(NumUsers, 2))
 
     trk_list = []
+    record_session_map(NumUsers, params)
 
     # Handle run 0 separately, set up trk_list
     (queues,
@@ -540,6 +581,14 @@ def study_algorithm(NumUsers: int,
 
     return
 
+#Phils input xoxo
+#def papi_test(papi):
+#if papi == strong:
+    #print("You're a loser papi")
+#else:
+    #print("Pull harder papi")
+#return
+
 
 def load_user_max_rates(NumUsers: int,
                         p_gen: float,
@@ -549,7 +598,10 @@ def load_user_max_rates(NumUsers: int,
     user_max_rates = [p_gen * max_sched_per_q] * NumUsers
 
     if keyword == 'uniformVeryHigh':
-        user_max_rates = [((NQs - 1) / 2) * p_gen] * NumUsers
+        if NQs > 1:
+            user_max_rates = [((NQs - 1) / 2) * p_gen] * NumUsers
+        else:
+            user_max_rates = [((NQs) / 2) * p_gen] * NumUsers
     elif keyword == 'uniformSessionMax':
         user_max_rates = [p_gen * max_sched_per_q] * NumUsers
     elif keyword == 'singleNonUniformSessionMax':

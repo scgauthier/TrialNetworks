@@ -2,7 +2,7 @@ import os
 import time
 import numpy as np
 from math import log10 as lg
-# from math import floor
+from math import ceil
 from scipy.special import binom as bc
 from MultiProcDistributedNUM import record_NumUsers, study_algorithm
 from MultiProcDistributedNUM import load_user_max_rates
@@ -28,9 +28,10 @@ def load_params(NumUsers: int) -> dict:
     H_num = 3
     p_gen = 0.05
     global_scale = 1000
-    max_sched_per_q = 1
+    max_sched_per_q = 3
     lambda_Switch = H_num * p_gen
-    NQs = int(bc(NumUsers, 2))
+    sessionSamples = 0.1
+    NQs = ceil(int(bc(NumUsers, 2)) * sessionSamples)
 
     # possible keywords:
     # 1. uniformVeryHigh
@@ -61,6 +62,7 @@ def load_params(NumUsers: int) -> dict:
         'H_num': H_num,
         'p_gen': p_gen,
         'max_sched_per_q': max_sched_per_q,
+        'sessionSamples': sessionSamples,
         'user_max_rates': user_max_rates,
         'session_min_rates': session_min_rates,
         'step_size': step_size,
@@ -93,7 +95,7 @@ def load_params(NumUsers: int) -> dict:
 
 
 if __name__ == '__main__':
-    NumUsers = 20
+    NumUsers = 4
     params = load_params(NumUsers)
     record_NumUsers(NumUsers, params)
 
