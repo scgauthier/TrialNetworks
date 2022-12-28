@@ -419,6 +419,8 @@ def record_trk_list(trk_list: list, params: dict) -> None:
 
 def record_midProcess(sum_rates: np.ndarray,
                       rate_requests: np.ndarray,
+                      max_rates: np.ndarray,
+                      min_rates: np.ndarray,
                       params: dict,
                       run: int) -> None:
     dirName = '../DataOutput/{}'.format(params['timeStr']) + '/SR'
@@ -428,6 +430,24 @@ def record_midProcess(sum_rates: np.ndarray,
     if not os.path.isfile(fileName):
         afile = open(fileName, 'w')
         np.savetxt(afile, sum_rates)
+        afile.close()
+
+    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/MR'
+    if not os.path.isdir(dirName):
+        os.mkdir(dirName)
+    fileName = dirName + '/{}.txt'.format(run)
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        np.savetxt(afile, max_rates)
+        afile.close()
+
+    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/mr'
+    if not os.path.isdir(dirName):
+        os.mkdir(dirName)
+    fileName = dirName + '/{}.txt'.format(run)
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        np.savetxt(afile, min_rates)
         afile.close()
 
     # dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
@@ -473,6 +493,25 @@ def record_AvDataSet(average_requests: np.ndarray,
     return
 
 
+def record_MaxMinDataSet(max_requests: np.ndarray,
+                         min_requests: np.ndarray,
+                         params: dict) -> None:
+
+    fileName = '../DataOutput/{}'.format(params['timeStr']) + '/MaxReq.txt'
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        np.savetxt(afile, max_requests)
+        afile.close()
+
+    fileName = '../DataOutput/{}'.format(params['timeStr']) + '/minReq.txt'
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        np.savetxt(afile, min_requests)
+        afile.close()
+
+    return
+
+
 def record_session_map(NumUsers: int, params: dict) -> None:
 
     NQs = int(bc(NumUsers, 2))
@@ -502,9 +541,19 @@ def get_runAvrgs(param_tuple: tuple) -> Tuple[np.ndarray, np.ndarray]:
                                         run)
 
     sum_rates = np.zeros(iters)
+    max_rates = np.zeros((iters, 2))
+    min_rates = np.zeros((iters, 2))
     for x in range(Nexcl, iters):
         sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
-    record_midProcess(sum_rates, requested_rates, params, run)
+        max_rates[x - Nexcl, 0] = np.max(requested_rates[:, x])
+        max_rates[x - Nexcl, 1] = np.where(
+                  requested_rates[:, x] == max_rates[x - Nexcl, 0])[0][0]
+        min_rates[x - Nexcl, 0] = np.min(requested_rates[:, x])
+        min_rates[x - Nexcl, 1] = np.where(
+                  requested_rates[:, x] == min_rates[x - Nexcl, 0])[0][0]
+    record_midProcess(sum_rates, requested_rates,
+                      max_rates, min_rates,
+                      params, run)
 
     return
 
@@ -530,9 +579,15 @@ def study_algorithm(NumUsers: int,
                                         trk_list,
                                         0)
     sum_rates = np.zeros(iters)
+    max_rates = np.zeros(iters)
+    min_rates = np.zeros(iters)
     for x in range(Nexcl, iters):
         sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
-    record_midProcess(sum_rates, requested_rates, params, 0)
+        max_rates[x - Nexcl, 0] = np.max(requested_rates[:, x])
+        min_rates[x - Nexcl, 0] = np.min(requested_rates[:, x])
+    record_midProcess(sum_rates, requested_rates,
+                      max_rates, min_rates,
+                      params, 0)
 
     # set up multiprocessing -- create pool of worker processes
     num_cpus = min(multiprocessing.cpu_count(), 30)
@@ -543,6 +598,8 @@ def study_algorithm(NumUsers: int,
                               run) for run in range(1, runs)])
 
     average_requests = np.zeros(iters)
+    max_requests = np.zeros(iters)
+    min_requests = np.zeros(iters)
     # rate_profile = np.zeros((int(bc(NumUsers, 2)), iters))
 
     for run in range(runs):
@@ -554,11 +611,27 @@ def study_algorithm(NumUsers: int,
         # fileName = dirName + '/{}.txt'.format(run)
         # if os.path.isfile(fileName):
         #     rate_profile += np.loadtxt(fileName).reshape(NQs, iters)
+        dirName = '../DataOutput/{}'.format(params['timeStr']) + '/MR'
+        fileName = dirName + '/{}.txt'.format(run)
+        if os.path.isfile(fileName):
+            max_requests += np.loadtxt(fileName)
+        dirName = '../DataOutput/{}'.format(params['timeStr']) + '/mr'
+        fileName = dirName + '/{}.txt'.format(run)
+        if os.path.isfile(fileName):
+            min_requests += np.loadtxt(fileName)
     average_requests *= (1 / runs)
+    max_requests *= (1 / runs)
+    min_requests *= (1 / runs)
     # rate_profile *= (1 / runs)
 
     # Remove un-needed intermediaries (clear up space)
     dirName = '../DataOutput/{}'.format(params['timeStr']) + '/SR'
+    shutil.rmtree(dirName, ignore_errors=True)
+    # Remove un-needed intermediaries (clear up space)
+    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/MR'
+    shutil.rmtree(dirName, ignore_errors=True)
+    # Remove un-needed intermediaries (clear up space)
+    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/mr'
     shutil.rmtree(dirName, ignore_errors=True)
     # dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
     # shutil.rmtree(dirName, ignore_errors=True)
@@ -568,6 +641,8 @@ def study_algorithm(NumUsers: int,
     #                 params)
     record_AvDataSet(average_requests,
                      params)
+    record_MaxMinDataSet(max_requests, min_requests,
+                         params)
 
     dirName = '../DataOutput/{}'.format(params['timeStr'])
     fgnm = dirName + '/AvReq.txt'
