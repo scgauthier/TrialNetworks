@@ -541,16 +541,12 @@ def get_runAvrgs(param_tuple: tuple) -> Tuple[np.ndarray, np.ndarray]:
                                         run)
 
     sum_rates = np.zeros(iters)
-    max_rates = np.zeros((iters, 2))
-    min_rates = np.zeros((iters, 2))
+    max_rates = np.zeros(iters)
+    min_rates = np.zeros(iters)
     for x in range(Nexcl, iters):
         sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
-        max_rates[x - Nexcl, 0] = np.max(requested_rates[:, x])
-        max_rates[x - Nexcl, 1] = np.where(
-                  requested_rates[:, x] == max_rates[x - Nexcl, 0])[0][0]
-        min_rates[x - Nexcl, 0] = np.min(requested_rates[:, x])
-        min_rates[x - Nexcl, 1] = np.where(
-                  requested_rates[:, x] == min_rates[x - Nexcl, 0])[0][0]
+        max_rates[x - Nexcl] = np.max(requested_rates[:, x])
+        min_rates[x - Nexcl] = np.min(requested_rates[:, x])
     record_midProcess(sum_rates, requested_rates,
                       max_rates, min_rates,
                       params, run)
@@ -583,8 +579,8 @@ def study_algorithm(NumUsers: int,
     min_rates = np.zeros(iters)
     for x in range(Nexcl, iters):
         sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
-        max_rates[x - Nexcl, 0] = np.max(requested_rates[:, x])
-        min_rates[x - Nexcl, 0] = np.min(requested_rates[:, x])
+        max_rates[x - Nexcl] = np.max(requested_rates[:, x])
+        min_rates[x - Nexcl] = np.min(requested_rates[:, x])
     record_midProcess(sum_rates, requested_rates,
                       max_rates, min_rates,
                       params, 0)
