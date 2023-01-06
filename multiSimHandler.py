@@ -30,14 +30,14 @@ def load_params(NumUsers: int) -> dict:
     global_scale = 1000
     max_sched_per_q = 3
     lambda_Switch = H_num * p_gen
-    sessionSamples = 0.1
+    sessionSamples = 1
     NQs = ceil(int(bc(NumUsers, 2)) * sessionSamples)
 
     # possible keywords:
     # 1. uniformVeryHigh
     # 2. uniformSessionMax
     # 3. singleNonUniformSessionMax
-    # 4. doubleNonUniformSessionMax
+    # 4. tenthUniformSessionMax
     user_max_rates = load_user_max_rates(NumUsers,
                                          p_gen, NQs,
                                          max_sched_per_q,
@@ -46,11 +46,14 @@ def load_params(NumUsers: int) -> dict:
     # step_size = round_down(NumUsers) / (1 + lg(NumUsers))
     step_size = 1
     # Scale increase slightly with Number of users
-    user_scale_factor = lg(NumUsers)
     # user_scale_factor = lg(NumUsers)
+    user_scale_factor = 1
     central_scale = user_scale_factor / lambda_Switch
 
-    param_change = True
+    # record delivered rates of ent.
+    study_delivery = True
+    # modify parameters during simulation
+    param_change = False
 
     # Possible change keys:
     # False, 'ChangeH'
@@ -68,6 +71,7 @@ def load_params(NumUsers: int) -> dict:
         'step_size': step_size,
         'user_scale_factor': user_scale_factor,
         'central_scale': central_scale,
+        'study_delivery': study_delivery,
         'param_change': param_change,
         'change_key': change_key,
         'indices': indices,

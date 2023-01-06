@@ -419,6 +419,7 @@ def record_trk_list(trk_list: list, params: dict) -> None:
 
 def record_midProcess(sum_rates: np.ndarray,
                       rate_requests: np.ndarray,
+                      sum_delivery: np.ndarray,
                       max_rates: np.ndarray,
                       min_rates: np.ndarray,
                       params: dict,
@@ -430,6 +431,15 @@ def record_midProcess(sum_rates: np.ndarray,
     if not os.path.isfile(fileName):
         afile = open(fileName, 'w')
         np.savetxt(afile, sum_rates)
+        afile.close()
+
+    dirName = '../DataOutput/{}'.format(params['timeStr']) + '/DR'
+    if not os.path.isdir(dirName):
+        os.mkdir(dirName)
+    fileName = dirName + '/{}.txt'.format(run)
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        np.savetxt(afile, sum_delivery)
         afile.close()
 
     dirName = '../DataOutput/{}'.format(params['timeStr']) + '/MR'
@@ -493,6 +503,18 @@ def record_AvDataSet(average_requests: np.ndarray,
     return
 
 
+def record_AvDelSet(average_delivery: np.ndarray,
+                    params: dict) -> None:
+
+    fileName = '../DataOutput/{}'.format(params['timeStr']) + '/AvDel.txt'
+    if not os.path.isfile(fileName):
+        afile = open(fileName, 'w')
+        np.savetxt(afile, average_delivery)
+        afile.close()
+
+    return
+
+
 def record_MaxMinDataSet(max_requests: np.ndarray,
                          min_requests: np.ndarray,
                          params: dict) -> None:
@@ -531,6 +553,7 @@ def get_runAvrgs(param_tuple: tuple) -> Tuple[np.ndarray, np.ndarray]:
     params, trk_list, run = param_tuple
     NumUsers, iters = params['NumUsers'], params['iters']
     Nexcl = params['Nexcl']
+    study_delivery = params['study_delivery']
 
     (queues,
      requested_rates,
@@ -541,13 +564,18 @@ def get_runAvrgs(param_tuple: tuple) -> Tuple[np.ndarray, np.ndarray]:
                                         run)
 
     sum_rates = np.zeros(iters)
+    if study_delivery:
+        sum_delivery = np.zeros(iters)
     max_rates = np.zeros(iters)
     min_rates = np.zeros(iters)
     for x in range(Nexcl, iters):
         sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
+        if study_delivery:
+            sum_delivery[x - Nexcl] = np.sum(delivered_rates[:, x], axis=0)
         max_rates[x - Nexcl] = np.max(requested_rates[:, x])
         min_rates[x - Nexcl] = np.min(requested_rates[:, x])
     record_midProcess(sum_rates, requested_rates,
+                      sum_delivery,
                       max_rates, min_rates,
                       params, run)
 
@@ -561,6 +589,7 @@ def study_algorithm(NumUsers: int,
     # unpack params
     iters, runs = params['iters'], params['runs']
     Nexcl = params['Nexcl']
+    study_delivery = params['study_delivery']
     # NQs = int(bc(NumUsers, 2))
 
     trk_list = []
@@ -575,13 +604,18 @@ def study_algorithm(NumUsers: int,
                                         trk_list,
                                         0)
     sum_rates = np.zeros(iters)
+    if study_delivery:
+        sum_delivery = np.zeros(iters)
     max_rates = np.zeros(iters)
     min_rates = np.zeros(iters)
     for x in range(Nexcl, iters):
         sum_rates[x - Nexcl] = np.sum(requested_rates[:, x], axis=0)
+        if study_delivery:
+            sum_delivery[x-Nexcl] = np.sum(delivered_rates[:, x], axis=0)
         max_rates[x - Nexcl] = np.max(requested_rates[:, x])
         min_rates[x - Nexcl] = np.min(requested_rates[:, x])
     record_midProcess(sum_rates, requested_rates,
+                      sum_delivery,
                       max_rates, min_rates,
                       params, 0)
 
@@ -594,6 +628,8 @@ def study_algorithm(NumUsers: int,
                               run) for run in range(1, runs)])
 
     average_requests = np.zeros(iters)
+    if study_delivery:
+        average_delivery = np.zeros(iters)
     max_requests = np.zeros(iters)
     min_requests = np.zeros(iters)
     # rate_profile = np.zeros((int(bc(NumUsers, 2)), iters))
@@ -603,6 +639,10 @@ def study_algorithm(NumUsers: int,
         fileName = dirName + '/{}.txt'.format(run)
         if os.path.isfile(fileName):
             average_requests += np.loadtxt(fileName)
+        dirName = '../DataOutput/{}'.format(params['timeStr']) + '/DR'
+        fileName = dirName + '/{}.txt'.format(run)
+        if os.path.isfile(fileName):
+            average_delivery += np.loadtxt(fileName)
         # dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
         # fileName = dirName + '/{}.txt'.format(run)
         # if os.path.isfile(fileName):
@@ -616,6 +656,8 @@ def study_algorithm(NumUsers: int,
         if os.path.isfile(fileName):
             min_requests += np.loadtxt(fileName)
     average_requests *= (1 / runs)
+    if study_delivery:
+        average_delivery *= (1 / runs)
     max_requests *= (1 / runs)
     min_requests *= (1 / runs)
     # rate_profile *= (1 / runs)
@@ -623,10 +665,13 @@ def study_algorithm(NumUsers: int,
     # Remove un-needed intermediaries (clear up space)
     dirName = '../DataOutput/{}'.format(params['timeStr']) + '/SR'
     shutil.rmtree(dirName, ignore_errors=True)
-    # Remove un-needed intermediaries (clear up space)
+    if study_delivery:
+        dirName = '../DataOutput/{}'.format(params['timeStr']) + '/DR'
+        shutil.rmtree(dirName, ignore_errors=True)
+
     dirName = '../DataOutput/{}'.format(params['timeStr']) + '/MR'
     shutil.rmtree(dirName, ignore_errors=True)
-    # Remove un-needed intermediaries (clear up space)
+
     dirName = '../DataOutput/{}'.format(params['timeStr']) + '/mr'
     shutil.rmtree(dirName, ignore_errors=True)
     # dirName = '../DataOutput/{}'.format(params['timeStr']) + '/RP'
@@ -637,6 +682,9 @@ def study_algorithm(NumUsers: int,
     #                 params)
     record_AvDataSet(average_requests,
                      params)
+    if study_delivery:
+        record_AvDelSet(average_delivery,
+                        params)
     record_MaxMinDataSet(max_requests, min_requests,
                          params)
 
@@ -675,6 +723,8 @@ def load_user_max_rates(NumUsers: int,
             user_max_rates = [((NQs) / 2) * p_gen] * NumUsers
     elif keyword == 'uniformSessionMax':
         user_max_rates = [p_gen * max_sched_per_q] * NumUsers
+    elif keyword == 'tenthUniformSessionMax':
+        user_max_rates = [p_gen * max_sched_per_q / 10] * NumUsers
     elif keyword == 'singleNonUniformSessionMax':
         first_partition = sample(range(NumUsers), floor(NumUsers / 4))
         # random N/4 subset has max user = half max session
