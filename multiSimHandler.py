@@ -36,8 +36,9 @@ def load_params(NumUsers: int) -> dict:
     # possible keywords:
     # 1. uniformVeryHigh
     # 2. uniformSessionMax
-    # 3. singleNonUniformSessionMax
-    # 4. tenthUniformSessionMax
+    # 3. halfUniformSessionMax
+    # 4. singleNonUniformSessionMax
+    # 5. doubleNonUniformSessionMax
     user_max_rates = load_user_max_rates(NumUsers,
                                          p_gen, NQs,
                                          max_sched_per_q,

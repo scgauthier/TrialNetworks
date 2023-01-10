@@ -723,8 +723,8 @@ def load_user_max_rates(NumUsers: int,
             user_max_rates = [((NQs) / 2) * p_gen] * NumUsers
     elif keyword == 'uniformSessionMax':
         user_max_rates = [p_gen * max_sched_per_q] * NumUsers
-    elif keyword == 'tenthUniformSessionMax':
-        user_max_rates = [p_gen * max_sched_per_q / 10] * NumUsers
+    elif keyword == 'halfUniformSessionMax':
+        user_max_rates = [p_gen * max_sched_per_q / 2] * NumUsers
     elif keyword == 'singleNonUniformSessionMax':
         first_partition = sample(range(NumUsers), floor(NumUsers / 4))
         # random N/4 subset has max user = half max session
@@ -736,7 +736,7 @@ def load_user_max_rates(NumUsers: int,
         # random subset have max user = half max session
         for x in first_partition:
             user_max_rates[x] = (p_gen * max_sched_per_q) / 2
-            remains.pop(x)
+            remains.remove(x)
         # another random subset have max user  = 1.5 * max session
         for x in sample(remains, floor(NumUsers / 4)):
             user_max_rates[x] = (p_gen * max_sched_per_q) * 1.5
