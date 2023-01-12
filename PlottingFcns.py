@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -218,17 +219,18 @@ def plot_TR_from_txt(timeString: str) -> None:
 
     # Start actual plotting
     cmap = plt.cm.get_cmap('plasma')
-    inds = np.linspace(0, 0.85, 4)
 
     iters = int(params['iters'])
-    plt.figure(figsize=(10, 8))
-    plt.plot(range(iters), rates, color=cmap(0),
-             label='Requested rates')
 
     H_num, p_gen = int(params['H_num']), params['p_gen']
     dist_fac = set_dist_fac(timeString)
     thresholds = [((H_num * p_gen)
                   // (1/10000)) / 10000]
+
+    inds = np.linspace(0, 0.85, 4)
+    plt.figure(figsize=(10, 8))
+    plt.plot(range(iters), rates, color=cmap(0),
+             label='Requested rates')
 
     if params['param_change'][1:5] == 'True':
         # Read trk_list from text file
@@ -411,5 +413,67 @@ def plot_delivery_rates(moving_avrgs: np.ndarray, avrg_delivered: list,
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
 
     plt.savefig(figname, dpi=300, bbox_inches='tight')
+
+    return
+
+
+def compare_delivery_from_text(timeString1: str,
+                               timeString2: str) -> None:
+
+    dictName1 = '../DataOutput/{}'.format(timeString1)
+
+    # Load param dict from text file
+    fileName = dictName1 + '/paramLog.txt'
+    params = {}
+    with open(fileName, 'r') as afile:
+        # linenum = 0
+        for line in afile.readlines():
+            # print(line)
+            try:
+                # print(line.split(':')[0])
+                params['{}'.format(line.split(':')[0])
+                       ] = float(line.split(':')[1])
+            except ValueError:
+                params['{}'.format(line.split(':')[0])
+                       ] = line.split(':')[1]
+
+    dictName2 = '../DataOutput/{}'.format(timeString2)
+
+    # Read deliveries from text files
+    fileName1 = dictName1 + '/AvDel.txt'
+    delivered1 = np.loadtxt(fileName1)
+    fileName2 = dictName2 + '/AvDel.txt'
+    delivered2 = np.loadtxt(fileName2)
+
+    # Start actual plotting
+    cmap = plt.cm.get_cmap('plasma')
+
+    iters = int(params['iters'])
+
+    inds = np.linspace(0, 0.85, 2)
+    plt.figure(figsize=(10, 8))
+    plt.plot(range(iters), delivered1, color=cmap(0),
+             label='RCP')
+    plt.plot(range(iters), delivered2, color=cmap(inds[1]),
+             label='Fixed')
+
+    min_cand1 = min(delivered1)
+    min_cand2 = min(delivered2)
+    min_val = min(min_cand1, min_cand2)
+
+    max_cand1 = max(delivered1)
+    max_cand2 = max(delivered2)
+    max_val = max(max_cand1, max_cand2)
+
+    plt.legend(fontsize=22, framealpha=0.6, loc=1)
+    plt.ylim(min_val * (1 - 0.1),
+             max_val * (1 + 0.1))
+
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
+    plt.xlabel('t', fontsize=24)
+    plt.ylabel('Entangled Pair Delivery', fontsize=24)
+
+    figName = dictName1 + '/AvDel'
+    plt.savefig(figName, dpi=300, bbox_inches='tight')
 
     return

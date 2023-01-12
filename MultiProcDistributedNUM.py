@@ -589,6 +589,7 @@ def study_algorithm(NumUsers: int,
     iters, runs = params['iters'], params['runs']
     Nexcl = params['Nexcl']
     study_delivery = params['study_delivery']
+    print(study_delivery, type(study_delivery))
     # NQs = int(bc(NumUsers, 2))
 
     trk_list = []
@@ -626,8 +627,7 @@ def study_algorithm(NumUsers: int,
                               run) for run in range(1, runs)])
 
     average_requests = np.zeros(iters)
-    if study_delivery:
-        average_delivery = np.zeros(iters)
+    average_delivery = np.zeros(iters)
     max_requests = np.zeros(iters)
     min_requests = np.zeros(iters)
     # rate_profile = np.zeros((int(bc(NumUsers, 2)), iters))

@@ -52,9 +52,9 @@ def load_params(NumUsers: int) -> dict:
     central_scale = user_scale_factor / lambda_Switch
 
     # record delivered rates of ent.
-    study_delivery = True
+    study_delivery = False
     # modify parameters during simulation
-    param_change = False
+    param_change = True
 
     # Possible change keys:
     # False, 'ChangeH'
