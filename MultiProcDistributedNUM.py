@@ -564,8 +564,7 @@ def get_runAvrgs(param_tuple: tuple) -> Tuple[np.ndarray, np.ndarray]:
                                         run)
 
     sum_rates = np.zeros(iters)
-    if study_delivery:
-        sum_delivery = np.zeros(iters)
+    sum_delivery = np.zeros(iters)
     max_rates = np.zeros(iters)
     min_rates = np.zeros(iters)
     for x in range(Nexcl, iters):
@@ -604,8 +603,7 @@ def study_algorithm(NumUsers: int,
                                         trk_list,
                                         0)
     sum_rates = np.zeros(iters)
-    if study_delivery:
-        sum_delivery = np.zeros(iters)
+    sum_delivery = np.zeros(iters)
     max_rates = np.zeros(iters)
     min_rates = np.zeros(iters)
     for x in range(Nexcl, iters):
