@@ -246,13 +246,18 @@ def sim_QL_w_rate_feedback(NumUsers: int,
 
                     user_scale_factor = params['user_scale_factor']
 
-                    if run > 0:
-                        eval = np.where(loc_params['indices'] == x)[0][0]
-                        loc_params['H_num'] = trk_list[eval]
+                    # Fixed trk_list
+                    eval = np.where(loc_params['indices'] == x)[0][0]
+                    loc_params['H_num'] = trk_list[eval]
 
-                    else:
-                        loc_params['H_num'] = vary_H(H_num, max_H, min_H)
-                        trk_list.append(loc_params['H_num'])
+                    # Variable trk_list
+                    # if run > 0:
+                    #     eval = np.where(loc_params['indices'] == x)[0][0]
+                    #     loc_params['H_num'] = trk_list[eval]
+                    #
+                    # else:
+                    #     loc_params['H_num'] = vary_H(H_num, max_H, min_H)
+                    #     trk_list.append(loc_params['H_num'])
 
                     H_num = loc_params['H_num']
                     threshold = ((H_num * p_gen)
@@ -563,7 +568,7 @@ def study_algorithm(NumUsers: int,
     Nexcl = params['Nexcl']
     # NQs = int(bc(NumUsers, 2))
 
-    trk_list = []
+    trk_list = [2, 3, 3, 2, 1, 1, 2, 3, 2]
     record_session_map(NumUsers, params)
 
     # Handle run 0 separately, set up trk_list
