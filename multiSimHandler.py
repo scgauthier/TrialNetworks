@@ -30,7 +30,7 @@ def load_params(NumUsers: int) -> dict:
     global_scale = 1000
     max_sched_per_q = 3
     lambda_Switch = H_num * p_gen
-    sessionSamples = 1
+    sessionSamples = 0.1
     NQs = ceil(int(bc(NumUsers, 2)) * sessionSamples)
 
     # possible keywords:
