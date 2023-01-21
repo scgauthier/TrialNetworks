@@ -50,6 +50,7 @@ def set_dist_fac(timeString: str) -> float:
         indices = np.linspace(iters/changes, iters, changes)
         spacing = int(indices[1] - indices[0])
         buffDist = int(0.2 * spacing)
+        # buffDist = int(0.01 * spacing)
 
         if params['change_key'][1:8] == 'ChangeH':
             H_num, p_gen = int(params['H_num']), params['p_gen']
@@ -62,6 +63,7 @@ def set_dist_fac(timeString: str) -> float:
 
         dist_fac = 0
         for interval in range(1, changes):
+            # for interval in range(0, changes):
             maxPt = max(rates[
                         (interval * spacing) + buffDist:((
                          interval + 1) * spacing) - 1])

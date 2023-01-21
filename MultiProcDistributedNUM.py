@@ -124,8 +124,8 @@ def update_prices(NumUsers: int, userSessions: np.ndarray,
                 # each user price is sum over queue lengths from their sessions
                 # plus difference in sum of their session rates from user max
                 p_u += (lastT_queue_lengths[int(mappedSession)]
-                        + lastT_rates[int(mappedSession)])
-        p_u -= user_max_rates[u]
+                        + (step_size * lastT_rates[int(mappedSession)]))
+        p_u -= step_size * user_max_rates[u]
         # Scaling of price, currently by 1/bar{lambda_u}
         p_u = p_u / user_max_rates[u]
         price_vector.append(max(p_u, 0))
