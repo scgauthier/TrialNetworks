@@ -520,6 +520,13 @@ def record_MaxMinDataSet(max_requests: np.ndarray,
     return
 
 
+# The point of this function is to record the random selection of sessions
+# The point of writing it to a file is so it can be read in independent runs
+# of the simulation (compatible with python multiprocessing)
+# this resulting file is compatible with partition_sessions_by_user
+
+# Input the number of users/nodes and a dictionary of all system params
+# session samples -- simple multiplier (example 0.1) of possible |S|
 def record_session_map(NumUsers: int, params: dict) -> None:
 
     NQs = int(bc(NumUsers, 2))
