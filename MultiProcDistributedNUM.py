@@ -199,10 +199,6 @@ def sim_QL_w_rate_feedback(NumUsers: int,
 
     param_change = loc_params['param_change']
 
-    max_H = H_num
-    min_H = 1
-    # min_H = max(1, H_num - 2)
-
     threshold = ((H_num * p_gen)
                  // (1/10000)) / 10000  # Truncate at 4th place
 
