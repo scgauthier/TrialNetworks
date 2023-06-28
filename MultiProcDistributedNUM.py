@@ -33,7 +33,11 @@ rc('ytick', labelsize=28)
 # sessions, as well as to sum their requested rates over their sessions.
 
 
-# First need to implement session id to user matching algorithm
+# Mapping of users to session id's matches the definition at the end of pg 3
+# in switch paper
+
+# From a pair of user/node id's, output session id
+# In: (u, v) --> out: s
 # Currently, sessions index from 1, users from 0
 def users_to_session_id(NumUsers: int, user_u: int,
                         user_v: int) -> int:
@@ -45,6 +49,8 @@ def users_to_session_id(NumUsers: int, user_u: int,
     return session_id
 
 
+# From a session id s, re-obtain users that session consists of
+# In: s --> out: (u, v)
 def session_id_to_users(NumUsers: int, session_id: int) -> list:
 
     # start with block 1
@@ -67,6 +73,7 @@ def session_id_to_users(NumUsers: int, session_id: int) -> list:
 
     return [x - 1, y - 1]
 
+# S(u), U(s) definined in the Algoriothm section of switch paper
 
 # takes as input the total number of sessions
 # Outputs a list of lists, ordered by user number, of S(u) for each u.
