@@ -8,6 +8,10 @@ multiSimHandler.py --> set all simulation parameters except number of users
   in function load_params. To run a simulation with these parameters, run
   "python multiSimHandler.py"
 
+  Simulation data will be output in a timestamped folder in ../DataOutput
+  To generate plots as in: 
+    Figure 2: call 
+
   Simulation parameters are:
     iters: number of time slots to run each simulation for
     runs: number of times to independently run the simulation. Final data output
