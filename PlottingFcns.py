@@ -69,61 +69,66 @@ def set_dist_fac(timeString: str) -> float:
                 thresholds.append(((H * p_gen)
                                   // (1/10000)) / 10000)
 
-        dist_fac: float = 0
-        # initial convergence
-        crossPt: int = np.where(rates[1: spacing - 1
-                                      ] <= thresholds[0])[0][0]
-        cPts.append(crossPt + 1)
+            dist_fac: float = 0
+            # initial convergence
+            crossPt: int = np.where(rates[1: spacing - 1
+                                          ] <= thresholds[0])[0][0]
+            cPts.append(crossPt + 1)
 
-        maxPt: int = max(rates[1 + crossPt:
-                         spacing - 1])
-        minPt: int = min(rates[1 + crossPt:
-                         spacing - 1])
+            maxPt: int = max(rates[1 + crossPt:
+                             spacing - 1])
+            minPt: int = min(rates[1 + crossPt:
+                             spacing - 1])
 
-        maxRelDist = abs((maxPt - thresholds[0])
-                         / thresholds[0])
-        minRelDist = abs((minPt - thresholds[0])
-                         / thresholds[0])
-
-        if (maxRelDist > dist_fac) or (minRelDist > dist_fac):
-            dist_fac = max(maxRelDist, minRelDist)
-
-        # follow ups
-        for interval in range(1, changes):
-            # convergence based on buffDist
-            # for interval in range(0, changes):
-            # maxPt = max(rates[
-            #             (interval * spacing) + buffDist:((
-            #              interval + 1) * spacing) - 1])
-            # minPt = min(rates[
-            #             (interval * spacing) + buffDist:((
-            #              interval + 1) * spacing) - 1])
-
-            # convergence based on crossing Pt
-            if thresholds[interval] <= thresholds[interval - 1]:
-                crossPt: int = np.where(rates[(interval * spacing) + 1: ((
-                            interval + 1) * spacing) - 1
-                            ] <= thresholds[interval])[0][0]
-            else:
-                crossPt: int = np.where(rates[(interval * spacing) + 1: ((
-                            interval + 1) * spacing) - 1
-                            ] >= thresholds[interval])[0][0]
-                
-            if thresholds[interval] != thresholds[interval - 1]:
-                cPts.append(crossPt + (interval * spacing) + 1)
-
-            maxPt: int = max(rates[(interval * spacing) + 1 + crossPt: ((
-                           interval + 1) * spacing) - 1])
-            minPt: int = min(rates[(interval * spacing) + 1 + crossPt: ((
-                           interval + 1) * spacing) - 1])
-
-            maxRelDist = abs((maxPt - thresholds[interval])
-                             / thresholds[interval])
-            minRelDist = abs((minPt - thresholds[interval])
-                             / thresholds[interval])
+            maxRelDist = abs((maxPt - thresholds[0])
+                             / thresholds[0])
+            minRelDist = abs((minPt - thresholds[0])
+                             / thresholds[0])
 
             if (maxRelDist > dist_fac) or (minRelDist > dist_fac):
                 dist_fac = max(maxRelDist, minRelDist)
+
+            # follow ups
+            for interval in range(1, changes):
+                # convergence based on buffDist
+                # for interval in range(0, changes):
+                # maxPt = max(rates[
+                #             (interval * spacing) + buffDist:((
+                #              interval + 1) * spacing) - 1])
+                # minPt = min(rates[
+                #             (interval * spacing) + buffDist:((
+                #              interval + 1) * spacing) - 1])
+
+                # convergence based on crossing Pt
+                if thresholds[interval] <= thresholds[interval - 1]:
+                    crossPt: int = np.where(rates[(interval * spacing) + 1: ((
+                                interval + 1) * spacing) - 1
+                                ] <= thresholds[interval])[0][0]
+                else:
+                    try:
+                        crossPt: int = np.where(rates[(interval * spacing) + 1: ((
+                                    interval + 1) * spacing) - 1
+                                    ] >= thresholds[interval])[0][0]
+                    except IndexError:
+                        crossPt: int = np.where(rates[(interval * spacing) + 1: ((
+                                    interval + 1) * spacing) - 1
+                                    ] <= thresholds[interval])[0][0]
+                    
+                if thresholds[interval] != thresholds[interval - 1]:
+                    cPts.append(crossPt + (interval * spacing) + 1)
+
+                maxPt: int = max(rates[(interval * spacing) + 1 + crossPt: ((
+                            interval + 1) * spacing) - 1])
+                minPt: int = min(rates[(interval * spacing) + 1 + crossPt: ((
+                            interval + 1) * spacing) - 1])
+
+                maxRelDist = abs((maxPt - thresholds[interval])
+                                / thresholds[interval])
+                minRelDist = abs((minPt - thresholds[interval])
+                                / thresholds[interval])
+
+                if (maxRelDist > dist_fac) or (minRelDist > dist_fac):
+                    dist_fac = max(maxRelDist, minRelDist)
 
     else:
         iters = int(params['iters'])
@@ -252,6 +257,9 @@ def plot_total_rates(rates: np.ndarray, NumUsers: int, params: dict,
 
 def plot_TR_from_txt(timeString: str) -> None:
 
+    axLabelFt = 24
+    axTickFt = 22
+    legendFt = 20
     # Load param dict from text file
     dictName = '../DataOutput/{}'.format(timeString)
     fileName = dictName + '/paramLog.txt'
@@ -316,11 +324,13 @@ def plot_TR_from_txt(timeString: str) -> None:
             plt.plot(range(iters), lower_error, '--',
                      color=cmap(inds[1]), linewidth=lw,
                      label=r'$(1 - \delta)\lambda_{EGS}$')
+            ax = plt.gca()
+            ax.xaxis.offsetText.set_fontsize(axTickFt)
             for interval in range(1, len(cPts) + 1): 
                 plt.axvline(x=cPts[interval - 1],
                             linestyle=':',
                             linewidth=lw, color='k')
-            plt.legend(fontsize=24, framealpha=0.6, loc=4)
+            plt.legend(fontsize=legendFt, framealpha=0.6, loc=4)
             plt.ylim(max(min(thresholds) * (1 - (4 * dist_fac)), 0),
                      max(thresholds) * (1 + (4 * dist_fac)))
 
@@ -336,17 +346,18 @@ def plot_TR_from_txt(timeString: str) -> None:
         plt.plot(range(iters), [(1 + dist_fac) * threshold] * iters, '--',
                  color=cmap(inds[2]), linewidth=lw,
                  label=r'$(1 +  \delta)\lambda_{EGS}$')
-        plt.legend(fontsize=22, framealpha=0.6, loc=4)
+        plt.legend(fontsize=legendFt, framealpha=0.6, loc=4)
         plt.ylim(max(min(thresholds) * (1 - (4 * dist_fac)), 0),
                  max(thresholds) * (1 + (4 * dist_fac)))
 
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
-    plt.tick_params(axis='both', labelsize=24)
-    plt.xlabel(r'$t_n$', fontsize=26)
+    plt.tick_params(axis='both', labelsize=axTickFt)
+    plt.xlabel(r'$t_n$', fontsize=axLabelFt)
+    plt.ylabel(r'Rates', fontsize=axLabelFt)
     plt.xlim((0, iters))
     # plt.ylabel('Sum of rate requests', fontsize=24)
 
-    figName = dictName + '/AvReqRates'
+    figName = dictName + '/AvReqRates_LongPaper'
     plt.savefig(figName, dpi=300, bbox_inches='tight')
 
     return
@@ -539,46 +550,56 @@ def plot_max_min_diff(timeString1: str, timeString2: str,
     diff5 = max5 - min5
     diff6 = max6 - min6
 
-    max_val1 = max(np.max(diff1[1000:]), np.max(diff2[1000:]))
-    max_val2 = max(np.max(diff3[1000:]), np.max(diff4[1000:]))
-    max_val3 = max(np.max(diff5[1000:]), np.max(diff6[1000:]))
+    # max_val1 = max(np.max(diff1[1000:]), np.max(diff2[1000:]))
+    # max_val2 = max(np.max(diff3[1000:]), np.max(diff4[1000:]))
+    # max_val3 = max(np.max(diff5[1000:]), np.max(diff6[1000:]))
 
     # Start actual plotting
     cmap = plt.cm.get_cmap('plasma')
     iters = int(params['iters'])
+    max_iter = int(1e4)
+    if max_iter > iters:
+        max_iter = iters
 
     inds = np.linspace(0, 0.85, 3)
     fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, figsize=(16, 14))
 
-    ax1.plot(range(1, iters), diff1[1:], color=cmap(0))
-    ax1.plot(range(1, iters), diff2[1:], color=cmap(inds[1]))
+    ax1.set_yscale('log')
+    ax2.set_yscale('log')
+    ax3.set_yscale('log')
 
-    ax1.set_ylim((-0.02 * max_val1, 1.1 * max_val1))
+    ax1.plot(range(1, max_iter), diff1[1:max_iter], color=cmap(0))
+    ax1.plot(range(1, max_iter), diff2[1:max_iter], color=cmap(inds[1]))
+
+    # ax1.set_ylim((-0.02 * max_val1, 1.1 * max_val1))
 
     # ax1.legend(fontsize=22, framealpha=0.6, loc=4)
 
-    ax2.plot(range(1, iters), diff3[1:], color=cmap(0))
-    ax2.plot(range(1, iters), diff4[1:], color=cmap(inds[1]))
+    ax2.plot(range(1, max_iter), diff3[1:max_iter], color=cmap(0))
+    ax2.plot(range(1, max_iter), diff4[1:max_iter], color=cmap(inds[1]))
 
-    ax2.set_ylim((-0.02 * max_val2, 1.1 * max_val2))
+    # ax2.set_ylim((-0.02 * max_val2, 1.1 * max_val2))
 
     # ax2.legend(fontsize=22, framealpha=0.6, loc=4)
 
-    ax3.plot(range(1, iters), diff5[1:], color=cmap(0),
+    ax3.plot(range(1, max_iter), diff5[1:max_iter], color=cmap(0),
              label=r'Uniform $\lambda_{u}$')
-    ax3.plot(range(1, iters), diff6[1:], color=cmap(inds[1]),
+    ax3.plot(range(1, max_iter), diff6[1:max_iter], color=cmap(inds[1]),
              label=r'Non-uniform $\lambda_u$')
 
-    ax3.set_ylim((-0.02 * max_val3, 1.1 * max_val3))
+    # ax3.set_ylim((-0.02 * max_val3, 1.1 * max_val3))
 
-    ax3.legend(fontsize=24, framealpha=0.6, loc=1)
+    ax3.legend(fontsize=28, framealpha=0.3, loc=1)
 
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
-    ax1.tick_params(axis='both', labelsize=24)
-    ax2.tick_params(axis='both', labelsize=24)
-    ax3.tick_params(axis='both', labelsize=24)
-    ax3.set_xlim((0, 1e5))
-    plt.xlabel(r'$t_n$', fontsize=26)
+    ax1.tick_params(axis='both', labelsize=32)
+    ax2.tick_params(axis='both', labelsize=32)
+    ax3.tick_params(axis='both', labelsize=32)
+    ax3.set_xlim((0, max_iter))
+    ax3.xaxis.offsetText.set_fontsize(32)
+
+    plt.xlabel(r'$t_n$', fontsize=34)
+    ax2.set_ylabel(r'Average $\max(\lambda_s(t_n)) - $ average $\min(\lambda_s(t_n))$', fontsize=34)
 
     plt.subplots_adjust(hspace=0.1)
 
@@ -590,6 +611,10 @@ def plot_max_min_diff(timeString1: str, timeString2: str,
 
 def plot_convergence_study(timeString1: str, timeString2: str,
                            timeString3: str) -> None:
+    
+    axLabelFt = 28
+    axTickFt = 26
+    legendFontSz = 24
     # Load param dict from first text file
     dictName = '../DataOutput/{}'.format(timeString1)
     fileName = dictName + '/paramLog.txt'
@@ -652,7 +677,6 @@ def plot_convergence_study(timeString1: str, timeString2: str,
     lower_error3 = [(1 - dist_fac3
                      ) * threshold] * int(iters)
 
-    legendFontSz = 24
 
     # Start actual plotting
     cmap = plt.cm.get_cmap('plasma')
@@ -716,19 +740,23 @@ def plot_convergence_study(timeString1: str, timeString2: str,
 
     ax3.set_ylim((0.95 * min_val, 1.03 * max_val))
     ax3.set_xlim((0, 25000))
+    ax1.set_yticks([0.13, 0.14, 0.15, 0.16, 0.17])
+    ax2.set_yticks([0.13, 0.14, 0.15, 0.16, 0.17])
+    ax3.set_yticks([0.13, 0.14, 0.15, 0.16, 0.17])
 
     ax3.legend(fontsize=legendFontSz, framealpha=0.85, loc=3)
-
+    ax3.xaxis.offsetText.set_fontsize(axTickFt)
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
-    ax1.tick_params(axis='both', labelsize=24)
-    ax2.tick_params(axis='both', labelsize=24)
-    ax3.tick_params(axis='both', labelsize=24)
-    plt.xlabel(r'$t_n$', fontsize=26)
+    ax1.tick_params(axis='both', labelsize=axTickFt)
+    ax2.tick_params(axis='both', labelsize=axTickFt)
+    ax3.tick_params(axis='both', labelsize=axTickFt)
+    plt.xlabel(r'$t_n$', fontsize=axLabelFt)
+    ax2.set_ylabel(r'Rates', fontsize=axLabelFt)
     # ax2.set_ylabel('Sum of requested session rates', fontsize=24)
 
     plt.subplots_adjust(hspace=0.08)
 
-    figName = dictName + '/ConvergenceStudy'
+    figName = dictName + '/ConvergenceStudy_LongPaper'
     plt.savefig(figName, dpi=300, bbox_inches='tight')
 
     return
