@@ -10,7 +10,12 @@ multiSimHandler.py --> set all simulation parameters except number of users
 
   Simulation data will be output in a timestamped folder in ../DataOutput
   To generate plots as in: 
-    Figure 2: call 
+    Figure 2: call plot_convergence_study, with the folder names of the three data sets you want to use
+      as arguments.
+    Figure 3: call plot_TR_from_text, with the folder names of the single data set you want to use as argument.
+    Figure 4: call plot_max_min_diff, with the 6 data sets you want to use as arguments. Ideally, these shouold
+      be structured as pairs, with 1 and 2, 3 and 4, and 5 and 6 being data sets from simulations that only differ in
+      how the user max rates were set.
 
   Simulation parameters are:
     iters: number of time slots to run each simulation for
